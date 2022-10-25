@@ -4,26 +4,33 @@ use peg;
 
 
 pub struct Declaration {
-    headers : Vec<HeaderType>,
+    headers     : Vec<HeaderType>,
+    declaration : DeclarationType
 }
 impl Declaration {
-    pub fn from(headers : Vec<HeaderType>) -> Declaration {
+    pub fn from(headers : Vec<HeaderType>, declaration : DeclarationType) -> Declaration {
         return Declaration {
-            headers : headers
+            headers     : headers,
+            declaration : declaration
         };
     }
-    pub fn to_header(headers : Vec<&str>) -> Vec<HeaderType> {
-        return headers.iter().map(|h| match *h {
-            "entry" => HeaderType::Entry,
-            "pub"   => HeaderType::Public,
-            _       => panic!("INTERNAL ERROR")
-        }).collect::<Vec<HeaderType>>();
-    }
+}
+pub enum DeclarationType {
+    Import(
+        String // Main module.
+    ),
+    InitVar(
+        bool,      // Mutable
+        String,    // Name
+        Expression // Value
+    )
 }
 pub enum HeaderType {
     Entry,
     Public
 }
+
+pub enum Expression {}
 
 
 pub fn read(path : &str) -> Vec<Declaration> {
@@ -39,11 +46,38 @@ peg::parser! {
             {e}
 
         rule declaration() -> Declaration
-            = h:declaration_header()
-            {Declaration::from(h)}
+            = _ h:declaration_headers() _ d:(declaration_import() / declaration_initvar()) _
+            {Declaration::from(h, d)}
 
+        rule declaration_headers() -> Vec<HeaderType>
+            = _ h:(declaration_header())* _
+            {h.into_iter().flatten().collect::<Vec<HeaderType>>()}
         rule declaration_header() -> Vec<HeaderType>
-            = h:$("#[" ("entry" / "pub") "]")*
-            {Declaration::to_header(h)}
+            = _ "#[" _ e:(declaration_header_entry() ++ ",") _ "]" _
+            {e}
+        rule declaration_header_entry() -> HeaderType
+            = _
+              "entry" {HeaderType::Entry}
+            / "pub"   {HeaderType::Public}
+
+        rule declaration_import() -> DeclarationType
+            = _ "import" _ e:ident() _
+            {DeclarationType::Import(e)}
+        rule declaration_initvar() -> DeclarationType
+            = _ m:$("cst" / "var") _ n:ident() _ e:expression() _
+            {DeclarationType::InitVar(m == String::from("var"), n, e)}
+
+        rule expression() -> Expression
+            = "|"
+            {/* TODO */}
+
+
+        rule ident() -> String
+            = i:['a'..='z' | 'A'..='Z' | '0'..='9']*
+            {i.iter().collect::<String>()}
+
+        rule _()
+            = quiet!{(" " / "\t" / "\n" / "\r")*}
+
     }
 }

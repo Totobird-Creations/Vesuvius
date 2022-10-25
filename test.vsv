@@ -1,11 +1,4 @@
-extern std::{
-    const,
-    io::{
-        stdout,
-        stdin
-    },
-    type::*
-};
+import std;
 
 #[entry]
 cst main = ||void{
