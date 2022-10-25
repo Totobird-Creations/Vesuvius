@@ -1,5 +1,3 @@
-// Vesuvius Programming Language : Number Guessing Game
-
 extern std::{
     const,
     io::{
