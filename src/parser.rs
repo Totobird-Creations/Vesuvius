@@ -6,6 +6,23 @@ use std::{
 use peg;
 
 
+pub struct Program {
+    declarations : Vec<Declaration>
+}
+impl Program {
+    pub fn from(declarations : Vec<Declaration>) -> Program {
+        return Program {
+            declarations
+        };
+    }
+}
+impl fmt::Display for Program {
+    fn fmt(&self, f : &mut fmt::Formatter<'_>) -> fmt::Result {
+        return write!(f, "{}", self.declarations.iter().map(|x| format!("{}", x.fmt(0))).collect::<Vec<String>>().join("\n"));
+    }
+}
+
+
 pub struct Declaration {
     headers     : Vec<HeaderType>,
     declaration : DeclarationType
@@ -13,14 +30,14 @@ pub struct Declaration {
 impl Declaration {
     pub fn from(headers : Vec<HeaderType>, declaration : DeclarationType) -> Declaration {
         return Declaration {
-            headers     : headers,
-            declaration : declaration
+            headers,
+            declaration
         };
     }
 }
-impl fmt::Display for Declaration {
-    fn fmt(&self, f : &mut fmt::Formatter<'_>) -> fmt::Result {
-        return write!(f, "{};", self.declaration);
+impl Declaration {
+    fn fmt(&self, indent : usize) -> String {
+        return format!("{}{};", "  ".repeat(indent), self.declaration.fmt(indent));
     }
 }
 
@@ -28,7 +45,7 @@ impl fmt::Display for Declaration {
 #[derive(Clone)]
 pub enum DeclarationType {
     Import(
-        String // Main module.
+        DeclarationImportPart
     ),
     InitVar(
         bool,      // Mutable
@@ -36,13 +53,38 @@ pub enum DeclarationType {
         Expression // Value
     )
 }
-impl fmt::Display for DeclarationType {
-    fn fmt(&self, f : &mut fmt::Formatter<'_>) -> fmt::Result {
-        return write!(f, "{}", match (self) {
-            DeclarationType::Import  (main)                 => format!("import {}", main),
-            DeclarationType::InitVar (mutable, name, value) => format!("let{} {} = {}", if (*mutable) {"^"} else {""}, name, value)
+impl DeclarationType {
+    fn fmt(&self, indent : usize) -> String {
+        return format!("{}", match (self) {
+            DeclarationType::Import  (main)                 => format!("@{}", main.fmt(indent)),
+            DeclarationType::InitVar (mutable, name, value) => format!(">{} {} = {}", if (*mutable) {"^"} else {""}, name, value.fmt(indent))
         });
     }
+}
+
+#[derive(Clone)]
+pub enum DeclarationImportPart {
+    Name(
+        String,                   // Source Name
+        DeclarationImportPartMode
+    List(Box<Vec<DeclarationImportPart>>),
+    All
+}
+impl DeclarationImportPart {
+    fn fmt(&self, indent : usize) -> String {
+        return format!("{}", match (self) {
+            // TODO : FIX WEIRD INDENTATION.
+            DeclarationImportPart::Name (name, rename, next) => format!("{}{}{}", name, if (name == rename) {String::new()} else {format!(" as {} ", rename)}, if let Some(next) = &**next {format!("::{}", next.fmt(0))} else {String::new()}),
+            DeclarationImportPart::List (subs)               => format!("{{\n{}\n{}}}", subs.iter().map(|x| format!("{}{}", "  ".repeat(indent + 1), x.fmt(indent + 1))).collect::<Vec<String>>().join(",\n"), "  ".repeat(indent)),
+            DeclarationImportPart::All                       => String::from("*")
+        });
+    }
+}
+#[derive(Clone)]
+pub enum DeclarationImportPartMode {
+    None,
+    Rename(String),
+    Sub(Box<DeclarationImportPart>)
 }
 
 
@@ -57,11 +99,11 @@ pub enum Statement {
     Declaration(DeclarationType),
     Expression(Expression)
 }
-impl fmt::Display for Statement {
-    fn fmt(&self, f : &mut fmt::Formatter<'_>) -> fmt::Result {
-        return write!(f, "{};", match (self) {
-            Statement::Declaration (declaration) => format!("{}", declaration),
-            Statement::Expression  (expression)  => format!("{}", expression)
+impl Statement {
+    fn fmt(&self, indent : usize) -> String {
+        return format!("{};", match (self) {
+            Statement::Declaration (declaration) => format!("{}", declaration.fmt(indent)),
+            Statement::Expression  (expression)  => format!("{}", expression.fmt(indent))
         });
     }
 }
@@ -113,59 +155,61 @@ pub enum Expression {
     Return(Box<Expression>)
 
 }
-impl fmt::Display for Expression {
-    fn fmt(&self, f : &mut fmt::Formatter<'_>) -> fmt::Result {
-        return write!(f, "{}", match (self) {
+impl Expression {
+    fn fmt(&self, indent : usize) -> String {
+        return format!("{}", match (self) {
 
             Expression::Function(args, ret, body) => format!(
-                "(|{}|{} {{{}}})",
-                args.iter().map(|(name, typ)| format!("{} : {}", name, typ)).collect::<Vec<String>>().join(", "),
-                if let Some(ret) = ret {format!(" {}", ret)} else {String::new()},
-                body.iter().map(|x| format!("{}", x)).collect::<Vec<String>>().join(" ")
+                "(|{}|{} {{\n{}\n{}}})",
+                args.iter().map(|(name, typ)| format!("{} : {}", name, typ.fmt(indent))).collect::<Vec<String>>().join(", "),
+                if let Some(ret) = ret {format!(" {}", ret.fmt(indent))} else {String::new()},
+                body.iter().map(|x| format!("{}{}", "  ".repeat(indent + 1), x.fmt(indent + 1))).collect::<Vec<String>>().join("\n"),
+                "  ".repeat(indent)
             ),
 
             Expression::Addition(left, right) => format!(
                 "({} + {})",
-                left,
-                right
+                left.fmt(indent),
+                right.fmt(indent)
             ),
             Expression::Subtraction(left, right) => format!(
                 "({} - {})",
-                left,
-                right
+                left.fmt(indent),
+                right.fmt(indent)
             ),
             Expression::Multiplication(left, right) => format!(
                 "({} * {})",
-                left,
-                right
+                left.fmt(indent),
+                right.fmt(indent)
             ),
             Expression::Division(left, right) => format!(
                 "({} / {})",
-                left,
-                right
+                left.fmt(indent),
+                right.fmt(indent)
             ),
 
             Expression::StaticAccess(of, name) => format!(
                 "{}::{}",
-                of,
+                of.fmt(indent),
                 name
             ),
             Expression::DotAccess(of, name) => format!(
                 "{}.{}",
-                of,
+                of.fmt(indent),
                 name
             ),
             Expression::Call(of, args) => format!(
-                "{}({})",
-                of,
-                args.iter().map(|x| format!("{}", x)).collect::<Vec<String>>().join(", ")
+                "{}(\n{}\n{})",
+                of.fmt(indent),
+                args.iter().map(|x| format!("{}{}", "  ".repeat(indent + 1), x.fmt(indent + 1))).collect::<Vec<String>>().join(",\n"),
+                "  ".repeat(indent)
             ),
 
             Expression::Integer   (value) => format!("{}", value),
             Expression::VarAccess (name)  => format!("{}", name),
             Expression::String    (value) => format!("\"{}\"", value),
 
-            Expression::Return (value) => format!("~{}", value)
+            Expression::Return (value) => format!("~{}", value.fmt(indent))
 
         });
     }
@@ -197,26 +241,21 @@ impl ExpressionModifier {
 pub struct Type {
     parts : Vec<String>
 }
-impl fmt::Display for Type {
-    fn fmt(&self, f : &mut fmt::Formatter<'_>) -> fmt::Result {
-        return write!(f, "{}", self.parts.join("::"));
+impl Type {
+    fn fmt(&self,_indent : usize) -> String {
+        return format!("{}", self.parts.join("::"));
     }
 }
 
 
 
-pub fn read(path : &str) -> Vec<Declaration> {
+pub fn read(path : &str) -> Program {
     match (parser::program(&fs::read_to_string(path).unwrap())) {
 
-        Ok(declarations) => {
+        Ok(program) => {
             
-            println!("\n{}\n",  declarations
-                .iter()
-                .map(|x| format!("{}", x))
-                .collect::<Vec<String>>()
-                .join("\n")
-            );
-            return declarations;
+            println!("\n{}\n",  program);
+            return program;
 
         },
 
@@ -244,9 +283,9 @@ peg::parser! {
     grammar parser() for str {
 
 
-        pub rule program() -> Vec<Declaration>
+        pub rule program() -> Program
             = _ e:(_ e:declaration_with_headers() _ ";" _ {e})* _
-                {e}
+                {Program::from(e)}
 
 
         rule declaration_with_headers() -> Declaration
@@ -268,12 +307,28 @@ peg::parser! {
             = _ d:(declaration_import() / declaration_initvar()) _
                 {d}
 
+        
         rule declaration_import() -> DeclarationType
-            = _ "import" _ e:ident() _
-                {DeclarationType::Import(e)}
+            = _ "@" _ e:ident() _ d:("::" d:declaration_import_part() {d})? _
+                {
+                    if let Some(d) = d {
+                        DeclarationType::Import(e, DeclarationImportPart::Sub(Box::new(d)))
+                    } else {
+                        DeclarationType::Import(e, DeclarationImportPart::None)
+                    }
+                }
+        
+        rule declaration_import_part() -> DeclarationImportPart
+            = _ "*" _
+                {DeclarationImportPart::All}
+            / _ i:ident() _ n:("::" n:declaration_import_part() {n})?
+                {DeclarationImportPart::Name(i, Box::new(n))}
+            / _ "{" d:((_ d:declaration_import_part() _ {d}) ** ",") "}"
+                {DeclarationImportPart::List(Box::new(d))}
 
+                                         
         rule declaration_initvar() -> DeclarationType
-            = _ "let" _ m:("^")? _ n:ident() _ "=" _ e:expression() _
+            = _ ">" m:("^")? _ n:ident() _ "=" _ e:expression() _
                 {DeclarationType::InitVar(matches!(m, Some(_)), n, e)}
 
 

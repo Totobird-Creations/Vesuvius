@@ -1,4 +1,4 @@
-run = ["cargo", "run"]
+run = ["cargo", "run", "-Z", "no-index-update"]
 hidden = ["target"]
 
 entrypoint = "src/main.rs"
