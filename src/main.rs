@@ -1,3 +1,6 @@
+#![allow(unused_parens)]
+
+
 pub mod parser;
 
 

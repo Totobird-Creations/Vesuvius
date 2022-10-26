@@ -4,12 +4,12 @@ import std;
 cst main = ||void{
     stdout::writeln("Welcome to the number guessing example.");
 
-    var tries_left : Int          = 8;
-    cst answer     : Int = rand::randi_range(0, 99);
+    var tries_left = 8;
+    cst answer     = rand::randi_range(0, 99);
 
     control::while(const::true, ||{
         stdout::writeln("You have " + Str::from(tries_left) + " tries left.");
         stdout::write("Enter a number:");
         cst guess = stdin::read_uint();
-    };
+    });
 };
