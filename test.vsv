@@ -1,15 +1,23 @@
-import std;
+import std::{
+    io::{
+        stdout,
+        stdin
+    },
+    rand,
+    control,
+    type::*
+};
 
 #[entry]
-cst main = ||void{
+let main = ||{
     stdout::writeln("Welcome to the number guessing example.");
 
-    var tries_left = 8;
-    cst answer     = rand::randi_range(0, 99);
+    let^ tries_left = 8;
+    let  answer     = rand::randi_range(0, 99);
 
-    control::while(const::true, ||{
-        stdout::writeln("You have " + Str::from(tries_left) + " tries left.");
+    control::while(||bool{~const::true;}, ||{
+        stdout::writeln("You have " + tries_left.to_string() + " tries left.");
         stdout::write("Enter a number:");
-        cst guess = stdin::read_uint();
+        let guess = stdin::read_uint();
     });
 };

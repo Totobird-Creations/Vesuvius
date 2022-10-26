@@ -40,7 +40,7 @@ impl fmt::Display for DeclarationType {
     fn fmt(&self, f : &mut fmt::Formatter<'_>) -> fmt::Result {
         return write!(f, "{}", match (self) {
             DeclarationType::Import  (main)                 => format!("import {}", main),
-            DeclarationType::InitVar (mutable, name, value) => format!("{} {} = {}", if (*mutable) {"var"} else {"cst"}, name, value)
+            DeclarationType::InitVar (mutable, name, value) => format!("let{} {} = {}", if (*mutable) {"^"} else {""}, name, value)
         });
     }
 }
@@ -72,7 +72,7 @@ pub enum Expression {
 
     Function(
         Vec<(String, Type)>, // Arguments
-        Type,                // Return
+        Option<Type>,        // Return
         Vec<Statement>       // Body
     ),
 
@@ -97,6 +97,10 @@ pub enum Expression {
         Box<Expression>,
         String
     ),
+    DotAccess(
+        Box<Expression>,
+        String
+    ),
     Call(
         Box<Expression>,     // Base
         Box<Vec<Expression>> // Arguments
@@ -104,16 +108,19 @@ pub enum Expression {
 
     Integer(i64),
     VarAccess(String),
-    String(String)
+    String(String),
+
+    Return(Box<Expression>)
+
 }
 impl fmt::Display for Expression {
     fn fmt(&self, f : &mut fmt::Formatter<'_>) -> fmt::Result {
         return write!(f, "{}", match (self) {
 
             Expression::Function(args, ret, body) => format!(
-                "(|{}| {} {{{}}})",
+                "(|{}|{} {{{}}})",
                 args.iter().map(|(name, typ)| format!("{} : {}", name, typ)).collect::<Vec<String>>().join(", "),
-                ret,
+                if let Some(ret) = ret {format!(" {}", ret)} else {String::new()},
                 body.iter().map(|x| format!("{}", x)).collect::<Vec<String>>().join(" ")
             ),
 
@@ -143,6 +150,11 @@ impl fmt::Display for Expression {
                 of,
                 name
             ),
+            Expression::DotAccess(of, name) => format!(
+                "{}.{}",
+                of,
+                name
+            ),
             Expression::Call(of, args) => format!(
                 "{}({})",
                 of,
@@ -151,7 +163,9 @@ impl fmt::Display for Expression {
 
             Expression::Integer   (value) => format!("{}", value),
             Expression::VarAccess (name)  => format!("{}", name),
-            Expression::String    (value) => format!("\"{}\"", value)
+            Expression::String    (value) => format!("\"{}\"", value),
+
+            Expression::Return (value) => format!("~{}", value)
 
         });
     }
@@ -159,6 +173,9 @@ impl fmt::Display for Expression {
 
 pub enum ExpressionModifier {
     StaticAccess(
+        String
+    ),
+    DotAccess(
         String
     ),
     Call(
@@ -169,6 +186,7 @@ impl ExpressionModifier {
     pub fn to_expression(self, of : Expression) -> Expression {
         return match (self) {
             ExpressionModifier::StaticAccess (name) => Expression::StaticAccess(Box::new(of), name),
+            ExpressionModifier::DotAccess    (name) => Expression::DotAccess(Box::new(of), name),
             ExpressionModifier::Call         (args) => Expression::Call(Box::new(of), Box::new(args))
         };
     }
@@ -225,9 +243,11 @@ pub fn read(path : &str) -> Vec<Declaration> {
 peg::parser! {
     grammar parser() for str {
 
+
         pub rule program() -> Vec<Declaration>
             = _ e:(_ e:declaration_with_headers() _ ";" _ {e})* _
                 {e}
+
 
         rule declaration_with_headers() -> Declaration
             = _ h:declaration_headers() _ d:declaration() _
@@ -243,15 +263,19 @@ peg::parser! {
                 ) _ "]" _ {h}
             )* _ {h.into_iter().flatten().collect::<Vec<HeaderType>>()}
 
+
         rule declaration() -> DeclarationType
             = _ d:(declaration_import() / declaration_initvar()) _
                 {d}
+
         rule declaration_import() -> DeclarationType
             = _ "import" _ e:ident() _
                 {DeclarationType::Import(e)}
+
         rule declaration_initvar() -> DeclarationType
-            = _ m:$("cst" / "var") _ n:ident() _ "=" _ e:expression() _
-                {DeclarationType::InitVar(m == String::from("var"), n, e)}
+            = _ "let" _ m:("^")? _ n:ident() _ "=" _ e:expression() _
+                {DeclarationType::InitVar(matches!(m, Some(_)), n, e)}
+
 
         rule statement() -> Statement
             = _ d:declaration() _
@@ -259,11 +283,15 @@ peg::parser! {
             / _ e:expression() _
                 {Statement::Expression(e)}
 
+
         rule expression() -> Expression
-            = _ "|" _ "|" _ r:typ() _ "{" _ s:(s:(_ s:statement() _ ";" {s}) {s})* _ "}" _
+            = _ "|" _ "|" _ r:typ()? _ "{" _ s:(_ s:statement() _ ";" _ {s})* _ "}" _
                 {Expression::Function(Vec::new(), r, s)}
             / _ e:expression_addition() _
                 {e}
+            / _ "~" _ e:expression()
+                {Expression::Return(Box::new(e))}
+
         rule expression_addition() -> Expression
             = _ a:expression_multiplication() _ "+" _ b:expression_addition() _
                 {Expression::Addition(Box::new(a), Box::new(b))}
@@ -271,6 +299,7 @@ peg::parser! {
                 {Expression::Subtraction(Box::new(a), Box::new(b))}
             / _ e:expression_multiplication() _
                 {e}
+
         rule expression_multiplication() -> Expression
             = _ a:expression_modifiable() _ "*" _ b:expression_multiplication() _
                 {Expression::Multiplication(Box::new(a), Box::new(b))}
@@ -278,6 +307,7 @@ peg::parser! {
                 {Expression::Division(Box::new(a), Box::new(b))}
             / _ e:expression_modifiable() _
                 {e}
+
         rule expression_modifiable() -> Expression
             = _ e:expression_literal() _ m:(m:expression_modifier())* _
                 {
@@ -287,11 +317,15 @@ peg::parser! {
                     }
                     expr
                 }
+
         rule expression_modifier() -> ExpressionModifier
             = _ "::" _ i:ident() _
                 {ExpressionModifier::StaticAccess(i)}
+            / _ "." _ i:ident() _
+                {ExpressionModifier::DotAccess(i)}
             / _ "(" _ a:((_ e:expression() _ {e}) ** ",") _ ")" _
                 {ExpressionModifier::Call(a)}
+
         rule expression_literal() -> Expression
             = _ i:int() _
                 {Expression::Integer(i)}
@@ -314,13 +348,14 @@ peg::parser! {
                 {i.iter().collect::<String>().parse::<i64>().unwrap()}
 
         rule typ() -> Type
-            = i:((_ i:ident() _ {i}) ** "::")
+            = i:((_ i:ident() _ {i}) ++ "::")
                 {Type {
                     parts : i
                 }}
 
         rule _()
             = quiet!{(" " / "\t" / "\n" / "\r")*}
+
 
     }
 }
