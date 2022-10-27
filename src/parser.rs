@@ -48,6 +48,7 @@ pub enum DeclarationType {
         DeclarationImportPart
     ),
     InitVar(
+        bool,      // Public
         bool,      // Mutable
         String,    // Name
         Expression // Value
@@ -56,8 +57,8 @@ pub enum DeclarationType {
 impl DeclarationType {
     fn fmt(&self, indent : usize) -> String {
         return match (self) {
-            DeclarationType::Import  (main)                 => format!("@{}", main.fmt(indent)),
-            DeclarationType::InitVar (mutable, name, value) => format!("{} ={}> {}", name, if (*mutable) {"+"} else {""}, value.fmt(indent))
+            DeclarationType::Import  (main)                         => format!("use {}", main.fmt(indent)),
+            DeclarationType::InitVar (public, mutable, name, value) => format!("{} {} ={}> {}", if (*public) {"pub"} else {""}, name, if (*mutable) {"+"} else {""}, value.fmt(indent))
         };
     }
 }
@@ -318,7 +319,7 @@ peg::parser! {
 
         
         rule declaration_import() -> DeclarationType
-            = _ "@" _ i:ident() _ d:("::" d:declaration_import_part() {d})? _
+            = _ "use" _ i:ident() _ d:("::" d:declaration_import_part() {d})? _
                 {
                     if let Some(d) = d {
                         DeclarationType::Import(DeclarationImportPart::Name(i, DeclarationImportPartMode::Sub(Box::new(d))))
@@ -341,8 +342,8 @@ peg::parser! {
 
                                          
         rule declaration_initvar() -> DeclarationType
-            = _ n:ident() _ "=" m:"+"? ">" _ e:expression() _
-                {DeclarationType::InitVar(matches!(m, Some(_)), n, e)}
+            = _ p:"pub"? _ n:ident() _ "=" m:"+"? ">" _ e:expression() _
+                {DeclarationType::InitVar(matches!(p, Some(_)), matches!(m, Some(_)), n, e)}
 
 
         rule statement() -> Statement

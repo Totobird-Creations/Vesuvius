@@ -1,4 +1,4 @@
-@std::{
+use std::{
     io::{stdout, stdin},
     rand,
     control = c,
@@ -6,7 +6,7 @@
 };
 
 #[entry]
-main => ||{
+pub main => ||{
     stdout::writeln("Welcome to the number guessing example.");
 
     tries_left =+> 8;

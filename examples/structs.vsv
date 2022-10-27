@@ -1,0 +1,33 @@
+use std::type::*;
+
+
+MyObj => struct {
+        a : int,
+        b : float,
+    pub c : bool
+};
+
+MyTrait => trait<T : MyObj> {
+
+    pub new => |value : float| T {
+        return MyObj {
+            a : 0,
+            b : value,
+            c : value == 0.0
+        };
+    };
+
+    pub add => |self : &T, amount : int| {
+        self.a += amount;
+        self.c  = self.a.to_float() == self.b;
+    };
+
+};
+
+MyObj
+
+
+#[entry]
+pub main => ||{
+    obj => MyObj::new();
+}
