@@ -18,7 +18,7 @@ impl Program {
 }
 impl fmt::Display for Program {
     fn fmt(&self, f : &mut fmt::Formatter<'_>) -> fmt::Result {
-        return write!(f, "{}", self.declarations.iter().map(|x| format!("{}", x.fmt(0))).collect::<Vec<String>>().join("\n"));
+        return write!(f, "{}", self.declarations.iter().map(|x| x.fmt(0)).collect::<Vec<String>>().join("\n"));
     }
 }
 
@@ -55,10 +55,10 @@ pub enum DeclarationType {
 }
 impl DeclarationType {
     fn fmt(&self, indent : usize) -> String {
-        return format!("{}", match (self) {
+        return match (self) {
             DeclarationType::Import  (main)                 => format!("@{}", main.fmt(indent)),
-            DeclarationType::InitVar (mutable, name, value) => format!(">{} {} = {}", if (*mutable) {"^"} else {""}, name, value.fmt(indent))
-        });
+            DeclarationType::InitVar (mutable, name, value) => format!("{} ={}> {}", name, if (*mutable) {"+"} else {""}, value.fmt(indent))
+        };
     }
 }
 
@@ -67,17 +67,17 @@ pub enum DeclarationImportPart {
     Name(
         String,                   // Source Name
         DeclarationImportPartMode
+    ),
     List(Box<Vec<DeclarationImportPart>>),
     All
 }
 impl DeclarationImportPart {
     fn fmt(&self, indent : usize) -> String {
-        return format!("{}", match (self) {
-            // TODO : FIX WEIRD INDENTATION.
-            DeclarationImportPart::Name (name, rename, next) => format!("{}{}{}", name, if (name == rename) {String::new()} else {format!(" as {} ", rename)}, if let Some(next) = &**next {format!("::{}", next.fmt(0))} else {String::new()}),
-            DeclarationImportPart::List (subs)               => format!("{{\n{}\n{}}}", subs.iter().map(|x| format!("{}{}", "  ".repeat(indent + 1), x.fmt(indent + 1))).collect::<Vec<String>>().join(",\n"), "  ".repeat(indent)),
-            DeclarationImportPart::All                       => String::from("*")
-        });
+        return match (self) {
+            DeclarationImportPart::Name (name, mode) => format!("{}{}", name, mode.fmt(indent)),
+            DeclarationImportPart::List (subs)       => format!("{{\n{}\n{}}}", subs.iter().map(|x| format!("{}{}", "  ".repeat(indent + 1), x.fmt(indent + 1))).collect::<Vec<String>>().join(",\n"), "  ".repeat(indent)),
+            DeclarationImportPart::All               => String::from("*")
+        };
     }
 }
 #[derive(Clone)]
@@ -85,6 +85,15 @@ pub enum DeclarationImportPartMode {
     None,
     Rename(String),
     Sub(Box<DeclarationImportPart>)
+}
+impl DeclarationImportPartMode {
+    fn fmt(&self, indent : usize) -> String {
+        return match (self) {
+            DeclarationImportPartMode::None         => String::new(),
+            DeclarationImportPartMode::Rename (to)  => format!("={}", to),
+            DeclarationImportPartMode::Sub    (sub) => format!("::{}", sub.fmt(indent))
+        };
+    }
 }
 
 
@@ -102,8 +111,8 @@ pub enum Statement {
 impl Statement {
     fn fmt(&self, indent : usize) -> String {
         return format!("{};", match (self) {
-            Statement::Declaration (declaration) => format!("{}", declaration.fmt(indent)),
-            Statement::Expression  (expression)  => format!("{}", expression.fmt(indent))
+            Statement::Declaration (declaration) => declaration.fmt(indent),
+            Statement::Expression  (expression)  => expression.fmt(indent)
         });
     }
 }
@@ -157,7 +166,7 @@ pub enum Expression {
 }
 impl Expression {
     fn fmt(&self, indent : usize) -> String {
-        return format!("{}", match (self) {
+        return match (self) {
 
             Expression::Function(args, ret, body) => format!(
                 "(|{}|{} {{\n{}\n{}}})",
@@ -205,13 +214,13 @@ impl Expression {
                 "  ".repeat(indent)
             ),
 
-            Expression::Integer   (value) => format!("{}", value),
-            Expression::VarAccess (name)  => format!("{}", name),
+            Expression::Integer   (value) => value.to_string(),
+            Expression::VarAccess (name)  => name.clone(),
             Expression::String    (value) => format!("\"{}\"", value),
 
             Expression::Return (value) => format!("~{}", value.fmt(indent))
 
-        });
+        };
     }
 }
 
@@ -243,7 +252,7 @@ pub struct Type {
 }
 impl Type {
     fn fmt(&self,_indent : usize) -> String {
-        return format!("{}", self.parts.join("::"));
+        return self.parts.join("::");
     }
 }
 
@@ -309,26 +318,30 @@ peg::parser! {
 
         
         rule declaration_import() -> DeclarationType
-            = _ "@" _ e:ident() _ d:("::" d:declaration_import_part() {d})? _
+            = _ "@" _ i:ident() _ d:("::" d:declaration_import_part() {d})? _
                 {
                     if let Some(d) = d {
-                        DeclarationType::Import(e, DeclarationImportPart::Sub(Box::new(d)))
+                        DeclarationType::Import(DeclarationImportPart::Name(i, DeclarationImportPartMode::Sub(Box::new(d))))
                     } else {
-                        DeclarationType::Import(e, DeclarationImportPart::None)
+                        DeclarationType::Import(DeclarationImportPart::Name(i, DeclarationImportPartMode::None))
                     }
                 }
         
         rule declaration_import_part() -> DeclarationImportPart
             = _ "*" _
                 {DeclarationImportPart::All}
-            / _ i:ident() _ n:("::" n:declaration_import_part() {n})?
-                {DeclarationImportPart::Name(i, Box::new(n))}
-            / _ "{" d:((_ d:declaration_import_part() _ {d}) ** ",") "}"
+            / _ i:ident() _ "::" _ n:declaration_import_part() _
+                {DeclarationImportPart::Name(i, DeclarationImportPartMode::Sub(Box::new(n)))}
+            / _ i:ident() _ "=" _ r:ident() _
+                {DeclarationImportPart::Name(i, DeclarationImportPartMode::Rename(r))}
+            / _ i:ident() _
+                {DeclarationImportPart::Name(i, DeclarationImportPartMode::None)}
+            / _ "{" _ d:((_ d:declaration_import_part() _ {d}) ** ",") _ "}" _
                 {DeclarationImportPart::List(Box::new(d))}
 
                                          
         rule declaration_initvar() -> DeclarationType
-            = _ ">" m:("^")? _ n:ident() _ "=" _ e:expression() _
+            = _ n:ident() _ "=" m:"+"? ">" _ e:expression() _
                 {DeclarationType::InitVar(matches!(m, Some(_)), n, e)}
 
 

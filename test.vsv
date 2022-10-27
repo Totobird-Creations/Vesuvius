@@ -1,20 +1,23 @@
 @std::{
     io::{stdout, stdin},
     rand,
-    control as c,
+    control = c,
     type::*
 };
 
 #[entry]
-> main = ||{
+main => ||{
     stdout::writeln("Welcome to the number guessing example.");
 
-    >^ tries_left = 8;
-    >  answer     = rand::randi_range(0, 99);
+    tries_left =+> 8;
+    answer     =>  rand::randi_range(0, 99);
 
-    c::while(||bool{~const::true;}, ||{
-        stdout::writeln("You have " + tries_left.to_string() + " tries left.");
-        stdout::write("Enter a number:");
-        > guess = stdin::read_uint();
-    });
+    c::while(
+        ||bool{~const::true;},
+        ||{
+            stdout::writeln("You have " + tries_left.to_string() + " tries left.");
+            stdout::write("Enter a number:");
+            guess => stdin::read_uint();
+        }
+    );
 };
