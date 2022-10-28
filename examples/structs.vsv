@@ -1,4 +1,9 @@
-use std::type::*;
+use std::{
+    control = c,
+    rand,
+    io::stdout,
+    type::*
+};
 
 
 let MyParentObj = struct {
@@ -48,5 +53,5 @@ let MyTraitImpl = impl MyObj<D> : MyTrait<T> {
 pub let main = ||{
     let obj = MyObj<bool>::new();
     obj.add(1);
-    obj.handle(true)
+    obj.handle(true);
 };

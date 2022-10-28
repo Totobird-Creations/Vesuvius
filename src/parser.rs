@@ -35,8 +35,13 @@ pub fn read(path : &str) -> Program {
             expected.sort();
 
             println!("\x1b[31m\x1b[1mFAILED TO PARSE SCRIPT\x1b[0m");
-            println!("  \x1b[33mFailed at lin \x1b[1m{}\x1b[0m\x1b[33m, col \x1b[1m{}\x1b[0m\x1b[33m, off \x1b[1m{}\x1b[0m\x1b[33m \x1b[0m", error.location.line, error.location.column, error.location.offset);
-
+            println!("  \x1b[32mFailed at lin \x1b[1m{}\x1b[0m\x1b[32m, col \x1b[1m{}\x1b[0m\x1b[32m, off \x1b[1m{}\x1b[0m\x1b[32m \x1b[0m", error.location.line, error.location.column, error.location.offset);
+            println!("    {}", file.lines().nth(error.location.line - 1).unwrap());
+            println!("  {}\x1b[33m^\x1b[0m", " ".repeat(error.location.column));
+            println!("\x1b[31mExpected one of : {}\x1b[0m",
+                expected.iter().map(|x| format!("\x1b[1m{}\x1b[0m\x1b[31m", x)).collect::<Vec<String>>().join(", ")
+            );
+            
             /*println!("\n{:?}\n{}\n",
                 error.location,
                 expected.join("\n")
@@ -91,7 +96,7 @@ impl Declaration {
 impl Declaration {
     fn fmt(&self, indent : usize) -> String {
         return format!(
-            "{}{};",
+            "{}{}\x1b[30m\x1b[2m;\x1b[0m",
             "  ".repeat(indent),
             self.declaration.fmt(indent)
         );
@@ -109,7 +114,7 @@ pub enum DeclarationType {
 impl DeclarationType {
     fn fmt(&self, indent : usize) -> String {
         return match (self) {
-            DeclarationType::Import  (main)    => format!("use {}", main.fmt(indent)),
+            DeclarationType::Import  (main)    => format!("\x1b[34muse\x1b[0m {}", main.fmt(indent)),
             DeclarationType::InitVar (initvar) => initvar.fmt(indent)
         };
     }
@@ -124,7 +129,7 @@ pub struct DeclarationInitVar {
 }
 impl DeclarationInitVar {
     fn fmt(&self, indent : usize) -> String {
-        return format!("{}let{} {} = {}",
+        return format!("\x1b[34m{}let{}\x1b[0m {} \x1b[2m=\x1b[0m {}",
             if (self.public) {"pub "} else {""},
             if (self.mutable) {" mut"} else {""},
             self.name,
@@ -153,10 +158,10 @@ impl DeclarationImportPart {
                         "{}{}",
                         "  ".repeat(indent + 1),
                         x.fmt(indent + 1)
-                    )).collect::<Vec<String>>().join(",\n"),
+                    )).collect::<Vec<String>>().join("\x1b[2m,\x1b[0m\n"),
                 "  ".repeat(indent)
             ),
-            DeclarationImportPart::All => String::from("*")
+            DeclarationImportPart::All => String::from("\x1b[36m*\x1b[0m")
         };
     }
 }
@@ -170,8 +175,8 @@ impl DeclarationImportPartMode {
     fn fmt(&self, indent : usize) -> String {
         return match (self) {
             DeclarationImportPartMode::None         => String::new(),
-            DeclarationImportPartMode::Rename (to)  => format!(" = {}", to),
-            DeclarationImportPartMode::Sub    (sub) => format!("::{}", sub.fmt(indent))
+            DeclarationImportPartMode::Rename (to)  => format!(" \x1b[2m=\x1b[0m {}", to),
+            DeclarationImportPartMode::Sub    (sub) => format!("\x1b[2m::\x1b[0m{}", sub.fmt(indent))
         };
     }
 }
@@ -191,10 +196,10 @@ pub enum Statement {
 }
 impl Statement {
     fn fmt(&self, indent : usize) -> String {
-        return format!("{};", match (self) {
+        return format!("{}\x1b[2m;\x1b[0m", match (self) {
             Statement::Declaration (declaration) => declaration.fmt(indent),
             Statement::Expression  (expression)  => expression.fmt(indent),
-            Statement::SetVar      (name, value) => format!("{} = {}", name.fmt(indent), value.fmt(indent))
+            Statement::SetVar      (name, value) => format!("{} \x1b[2m=\x1b[0m {}", name.fmt(indent), value.fmt(indent))
         });
     }
 }
@@ -317,9 +322,9 @@ impl Expression {
         return match (self) {
 
             Expression::Function(args, ret, body) => format!(
-                "(|{}|{} {{\n{}\n{}}})",
+                "(\x1b[92m|\x1b[0m{}\x1b[92m|\x1b[0m{} \x1b[2m{{\x1b[0m\n{}\n{}\x1b[2m}}\x1b[0m)",
                 args.iter().map(
-                    |(name, typ)| format!("{} : {}", name, typ.fmt(indent))
+                    |(name, typ)| format!("{} \x1b[2m:\x1b[0m {}", name, typ.fmt(indent))
                 ).collect::<Vec<String>>().join(", "),
                 if let Some(ret) = ret {
                     format!(" {}", ret.fmt(indent))
@@ -332,7 +337,7 @@ impl Expression {
                 "  ".repeat(indent)
             ),
             Expression::Struct(generics, extends, args) => format!(
-                "struct{}{} {{\n{}\n{}}}",
+                "\x1b[35mstruct\x1b[0m{}{} {{\n{}\n{}}}",
                 if (generics.len() > 0) {
                     format!("<{}>", generics.iter()
                         .map(|(name, typ)| format!(
@@ -358,7 +363,7 @@ impl Expression {
                 "  ".repeat(indent)
             ),
             Expression::Trait(generics, extends, functions) => format!(
-                "trait{}{} {{\n{}\n{}}}",
+                "\x1b[35mtrait\x1b[0m{}{} {{\n{}\n{}}}",
                 if (generics.len() > 0) {
                     format!("<{}>", generics.iter()
                         .map(|(name, typ)| format!(
@@ -383,7 +388,7 @@ impl Expression {
                 "  ".repeat(indent)
             ),
             Expression::TraitImpl(struc, trai, functions) => format!(
-                "impl {} : {} {{\n{}\n{}}}" ,
+                "\x1b[35mimpl\x1b[0m {} : {} {{\n{}\n{}}}" ,
                 struc.fmt(indent),
                 trai.fmt(indent),
                 functions.iter()
