@@ -1,47 +1,52 @@
 use std::type::*;
 
 
-MyParentObj => struct {
+let MyParentObj = struct {
     l : int
 };
 
 
-MyObj => struct<D>:MyParentObj {
+let MyObj = struct<D>:MyParentObj {
         a : int,
         b : float,
     pub c : bool,
         d : D
 };
 
-MyTrait => trait<T : MyObj> {
+let MyTrait = trait<T : MyObj, D> {
 
-    pub new => |value : float| T {
-        return MyObj {
+    pub let new = |value : float, d : D| T {
+        let obj = MyObj {
             a : 0,
             b : value,
-            c : value == 0.0
+            c : value == 0.0,
+            d : d
         };
+        obj << MyTraitImpl;
+        ~obj;
     };
 
-    pub add => |self : &T, amount : int| {
-        self.a += amount;
-        self.c  = self.a.to_float() == self.b;
+    pub let add = |self : &T, amount : int| {
+        self.a = self.a + amount;
+        self.c = self.a.to_float() == self.b;
     };
 
-    pub handle => |self : &T, d : D|;
+    pub let handle = |self : &T, d : D|;
 
 };
 
-impl MyTrait<T> for MyObj<D> {
+let MyTraitImpl = impl MyObj<D> : MyTrait<T> {
 
-    pub handle => |self : &T, d : D| {
+    pub let handle = |self : &T, d : D| {
         self.d = d;
     };
 
-}
+};
 
 
 #[entry]
-pub main => ||{
-    obj => MyObj<bool>::new();
-}
+pub let main = ||{
+    let obj = MyObj<bool>::new();
+    obj.add(1);
+    obj.handle(true)
+};
