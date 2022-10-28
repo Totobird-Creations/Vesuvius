@@ -3,7 +3,7 @@ use std::type::*;
 
 MyParentObj => struct {
     l : int
-}
+};
 
 
 MyObj => struct<D>:MyParentObj {

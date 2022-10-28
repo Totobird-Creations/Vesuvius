@@ -1,7 +1,7 @@
 use std::{
     io::{stdout, stdin},
     rand,
-    control = c,
+    c => control,
     type::*
 };
 

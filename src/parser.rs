@@ -47,19 +47,32 @@ pub enum DeclarationType {
     Import(
         DeclarationImportPart
     ),
-    InitVar(
-        bool,      // Public
-        bool,      // Mutable
-        String,    // Name
-        Expression // Value
-    )
+    InitVar(DeclarationInitVar)
 }
 impl DeclarationType {
     fn fmt(&self, indent : usize) -> String {
         return match (self) {
-            DeclarationType::Import  (main)                         => format!("use {}", main.fmt(indent)),
-            DeclarationType::InitVar (public, mutable, name, value) => format!("{} {} ={}> {}", if (*public) {"pub"} else {""}, name, if (*mutable) {"+"} else {""}, value.fmt(indent))
+            DeclarationType::Import  (main)    => format!("use {}", main.fmt(indent)),
+            DeclarationType::InitVar (initvar) => initvar.fmt(indent)
         };
+    }
+}
+
+#[derive(Clone)]
+pub struct DeclarationInitVar {
+    public  : bool,
+    mutable : bool,
+    name    : String,
+    value   : Expression
+}
+impl DeclarationInitVar {
+    fn fmt(&self, indent : usize) -> String {
+        return format!("{} {} ={}> {}",
+            if (self.public) {"pub"} else {""},
+            self.name,
+            if (self.mutable) {"+"} else {""},
+            self.value.fmt(indent)
+        );
     }
 }
 
@@ -128,7 +141,24 @@ pub enum Expression {
         Vec<Statement>       // Body
     ),
     Struct(
-        Vec<DeclarationType>
+        Vec<(            // Generics
+            String,
+            Option<Type>
+        )>,
+        Option<Type>,    // Extends,
+        Vec<(            // Values
+            bool,          // Public
+            String,        // Name
+            Type           // Type
+        )>
+    ),
+    Trait(
+        Vec<(                   // Generics
+            String,
+            Option<Type>
+        )>,
+        Option<Type>,           // Extends,
+        Vec<DeclarationInitVar> // Functions
     ),
 
     Addition(
@@ -179,9 +209,18 @@ impl Expression {
                 body.iter().map(|x| format!("{}{}", "  ".repeat(indent + 1), x.fmt(indent + 1))).collect::<Vec<String>>().join("\n"),
                 "  ".repeat(indent)
             ),
-            Expression::Struct(functions) => format!(
-                "struct {{\n{}\n{}}}",
-                functions.iter().map(|func| func.fmt(indent + 1)).collect::<Vec<String>>().join("\n"),
+            Expression::Struct(generics, extends, args) => format!(
+                "struct{}{} {{\n{}\n{}}}",
+                if (generics.len() > 0) {format!("<{}>", generics.iter().map(|(name, typ)| format!("{}{}", name, if let Some(typ) = typ {format!(" : {}", typ.fmt(indent))} else {String::new()})).collect::<Vec<String>>().join(", "))} else {String::new()},
+                if let Some(extends) = extends {format!(" : {}", extends.fmt(indent))} else {String::new()},
+                args.iter().map(|(public, name, typ)| format!("{}{} : {}", if (*public) {"pub "} else {""}, name, typ.fmt(indent + 1))).collect::<Vec<String>>().join("\n"),
+                "  ".repeat(indent)
+            ),
+            Expression::Trait(generics, extends, functions) => format!(
+                "trait{}{} {{\n{}\n{}}}",
+                if (generics.len() > 0) {format!("<{}>", generics.iter().map(|(name, typ)| format!("{}{}", name, if let Some(typ) = typ {format!(" : {}", typ.fmt(indent))} else {String::new()})).collect::<Vec<String>>().join(", "))} else {String::new()},
+                if let Some(extends) = extends {format!(" : {}", extends.fmt(indent))} else {String::new()},
+                functions.iter().map(|function| format!("{}")).collect::<Vec<String>>().join("\n"),
                 "  ".repeat(indent)
             ),
 
@@ -341,7 +380,7 @@ peg::parser! {
                 {DeclarationImportPart::All}
             / _ i:ident() _ "::" _ n:declaration_import_part() _
                 {DeclarationImportPart::Name(i, DeclarationImportPartMode::Sub(Box::new(n)))}
-            / _ i:ident() _ "=" _ r:ident() _
+            / _ r:ident() _ "=>" _ i:ident() _
                 {DeclarationImportPart::Name(i, DeclarationImportPartMode::Rename(r))}
             / _ i:ident() _
                 {DeclarationImportPart::Name(i, DeclarationImportPartMode::None)}
@@ -351,7 +390,12 @@ peg::parser! {
                                          
         rule declaration_initvar() -> DeclarationType
             = _ p:"pub"? _ n:ident() _ "=" m:"+"? ">" _ e:expression() _
-                {DeclarationType::InitVar(matches!(p, Some(_)), matches!(m, Some(_)), n, e)}
+                {DeclarationType::InitVar(DeclarationInitVar {
+                    public  : matches!(p, Some(_)),
+                    mutable : matches!(m, Some(_)),
+                    name    : n,
+                    value   : e
+                })}
 
 
         rule statement() -> Statement
@@ -364,9 +408,15 @@ peg::parser! {
         rule expression() -> Expression
             = _ "|" _ "|" _ r:typ()? _ "{" _ s:(_ s:statement() _ ";" _ {s})* _ "}" _
                 {Expression::Function(Vec::new(), r, s)}
+            / _ "struct" _ g:("<" _ g:((_ n:ident() _ t:(":" _ t:typ() {t})? _ {(n, t)}) ** ",") _ ">" {g})? _ p:(_ ":" _ p:typ() _ {p})? _ "{" _ a:((_ p:"pub"? _ i:ident() _ ":" _ t:typ() _ {(matches!(p, Some(_)), i, t)}) ** ",") _ "}" _
+                {Expression::Struct(
+                    if let Some(generics) = g {generics} else {Vec::new()},
+                    p,
+                    a
+                )}
             / _ e:expression_addition() _
                 {e}
-            / _ "~" _ e:expression()
+            / _ "~" _ e:expression() _
                 {Expression::Return(Box::new(e))}
 
         rule expression_addition() -> Expression
@@ -416,8 +466,6 @@ peg::parser! {
                 / expected!("Valid escape sequence.")
             )* "\"" _
                 {Expression::String(s.into_iter().collect())}
-            / _ "struct" _ g:("<" _ g:((_ n:ident() _ t:(":" _ t:typ() {t})? _ {(n, t)}) ** ",") _ ">" {g})? _ p:(_ ":" _ p:typ() _ {p})? _ "{" _ f:(_ f:declaration_initvar() _ ";" {f})* _ "}"
-                {Expression::Struct(f)}
 
 
         rule ident() -> String
