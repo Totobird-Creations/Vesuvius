@@ -1,10 +1,16 @@
 use std::type::*;
 
 
-MyObj => struct {
+MyParentObj => struct {
+    l : int
+}
+
+
+MyObj => struct<D>:MyParentObj {
         a : int,
         b : float,
-    pub c : bool
+    pub c : bool,
+        d : D
 };
 
 MyTrait => trait<T : MyObj> {
@@ -22,12 +28,20 @@ MyTrait => trait<T : MyObj> {
         self.c  = self.a.to_float() == self.b;
     };
 
+    pub handle => |self : &T, d : D|;
+
 };
 
-MyObj
+impl MyTrait<T> for MyObj<D> {
+
+    pub handle => |self : &T, d : D| {
+        self.d = d;
+    };
+
+}
 
 
 #[entry]
 pub main => ||{
-    obj => MyObj::new();
+    obj => MyObj<bool>::new();
 }

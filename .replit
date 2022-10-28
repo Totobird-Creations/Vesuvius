@@ -1,5 +1,5 @@
-run = ["cargo", "run", "-Z", "no-index-update"]
-hidden = ["target"]
+run = ["sh", "replit.sh"]
+hidden = ["target", ".cargo_cache"]
 
 entrypoint = "src/main.rs"
 

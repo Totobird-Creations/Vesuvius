@@ -127,6 +127,9 @@ pub enum Expression {
         Option<Type>,        // Return
         Vec<Statement>       // Body
     ),
+    Struct(
+        Vec<DeclarationType>
+    ),
 
     Addition(
         Box<Expression>,
@@ -174,6 +177,11 @@ impl Expression {
                 args.iter().map(|(name, typ)| format!("{} : {}", name, typ.fmt(indent))).collect::<Vec<String>>().join(", "),
                 if let Some(ret) = ret {format!(" {}", ret.fmt(indent))} else {String::new()},
                 body.iter().map(|x| format!("{}{}", "  ".repeat(indent + 1), x.fmt(indent + 1))).collect::<Vec<String>>().join("\n"),
+                "  ".repeat(indent)
+            ),
+            Expression::Struct(functions) => format!(
+                "struct {{\n{}\n{}}}",
+                functions.iter().map(|func| func.fmt(indent + 1)).collect::<Vec<String>>().join("\n"),
                 "  ".repeat(indent)
             ),
 
@@ -396,7 +404,9 @@ peg::parser! {
                 {ExpressionModifier::Call(a)}
 
         rule expression_literal() -> Expression
-            = _ i:int() _
+            = _ "(" _ e:expression() _ ")" _
+                {e}
+            / _ i:int() _
                 {Expression::Integer(i)}
             / _ i:ident() _
                 {Expression::VarAccess(i)}
@@ -406,6 +416,8 @@ peg::parser! {
                 / expected!("Valid escape sequence.")
             )* "\"" _
                 {Expression::String(s.into_iter().collect())}
+            / _ "struct" _ g:("<" _ g:((_ n:ident() _ t:(":" _ t:typ() {t})? _ {(n, t)}) ** ",") _ ">" {g})? _ p:(_ ":" _ p:typ() _ {p})? _ "{" _ f:(_ f:declaration_initvar() _ ";" {f})* _ "}"
+                {Expression::Struct(f)}
 
 
         rule ident() -> String
