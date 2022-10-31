@@ -7,5 +7,6 @@ pub mod run;
 
 
 fn main() {
-    parser::parse("examples/basic.vsv");
+    let program = parser::parse("examples/basic.vsv");
+    program.verify();
 }

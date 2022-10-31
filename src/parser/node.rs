@@ -17,7 +17,7 @@ pub struct Declaration {
 pub enum DeclarationHeader {
     Entry
 }
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum DeclarationVisibility {
     Public,
     Private
@@ -33,7 +33,7 @@ pub enum DeclarationType {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Statement {
     InitVar(
         String,    // Name
@@ -42,7 +42,7 @@ pub enum Statement {
     Expression(Expression)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expression {
 
     EqualsOperation(Box<Expression>, Box<Expression>),
@@ -60,7 +60,7 @@ pub enum Expression {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Atom {
     Literal(Literal),
     Expression(Box<Expression>),
@@ -73,7 +73,7 @@ pub enum Atom {
     )
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Literal {
     Int(String),
     Float(
@@ -84,14 +84,14 @@ pub enum Literal {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Type {
     parts  : Vec<String>,
     constr : HashMap<String, Literal>
 }
 
 
-#[derive(Debug)]
+#[derive(Clone)]
 pub struct Block {
     pub stmts   : Vec<Statement>,
     pub retlast : bool            // Return the value of the last statement

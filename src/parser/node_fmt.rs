@@ -1,7 +1,8 @@
 use std::fmt::{
     Display,
     Formatter,
-    Result
+    Result,
+    Debug
 };
 
 use crate::parser::node::*;
@@ -38,30 +39,30 @@ impl Display for Colour {
 
 impl Display for Program {
     fn fmt(&self, f : &mut Formatter<'_>) -> Result {
-        return write!(f, "{}", self.decls.iter().map(|decl| format!("{};", decl.fmt(0))).collect::<Vec<String>>().join("\n"));
+        return write!(f, "{}", self.decls.iter().map(|decl| format!("{};", decl.format(0))).collect::<Vec<String>>().join("\n"));
     }
 }
 
 
 impl Declaration {
-    fn fmt(&self, indent : usize) -> String {
+    fn format(&self, indent : usize) -> String {
         return format!("{}{} {}",
             self.headers.iter()
                 .map(|header| format!("{}\n{}",
-                    header.fmt(indent),
+                    header.format(indent),
                     INDENT.repeat(indent)
                 ))
                 .collect::<Vec<String>>()
                 .join(""),
-            self.vis.fmt(indent),
-            self.decl.fmt(indent)
+            self.vis.format(indent),
+            self.decl.format(indent)
         );
     }
 }
 
 
 impl DeclarationHeader {
-    fn fmt(&self, _indent : usize) -> String {
+    pub fn format(&self, _indent : usize) -> String {
         return c!(HEADER, format!("#[{}]", match (self) {
             Self::Entry => "entry"
         }));
@@ -70,7 +71,7 @@ impl DeclarationHeader {
 
 
 impl DeclarationVisibility {
-    fn fmt(&self, _indent : usize) -> String {
+    pub fn format(&self, _indent : usize) -> String {
         return c!(KEYWORD, match (self) {
             Self::Public  => "pub",
             Self::Private => "priv"
@@ -80,14 +81,14 @@ impl DeclarationVisibility {
 
 
 impl DeclarationType {
-    fn fmt(&self, indent : usize) -> String {
+    fn format(&self, indent : usize) -> String {
         return match (self) {
 
             Self::Function(name, _args, _ret, block) => {
                 format!("{} {} {}",
                     c!(OBJECT, "fn"),
                     c!(NAME, name),
-                    block.fmt(indent)
+                    block.format(indent)
                 )
             }
 
@@ -97,18 +98,18 @@ impl DeclarationType {
 
 
 impl Statement {
-    fn fmt(&self, indent : usize) -> String {
+    fn format(&self, indent : usize) -> String {
         return match (self) {
 
             Self::InitVar(name, value) => {
                 format!("{} {} = {}",
                     c!(KEYWORD, "let"),
                     c!(NAME, name),
-                    value.fmt(indent)
+                    value.format(indent)
                 )
             },
 
-            Self::Expression(expr) => expr.fmt(indent)
+            Self::Expression(expr) => expr.format(indent)
 
         }
     }
@@ -116,21 +117,21 @@ impl Statement {
 
 
 impl Expression {
-    fn fmt(&self, indent : usize) -> String {
+    fn format(&self, indent : usize) -> String {
         return match (self) {
 
-            Self::EqualsOperation         (left, right) => format!("({} == {})", left.fmt(indent), right.fmt(indent)),
-            Self::NotEqualsOperation      (left, right) => format!("({} != {})", left.fmt(indent), right.fmt(indent)),
-            Self::GreaterOperation        (left, right) => format!("({} > {})", left.fmt(indent), right.fmt(indent)),
-            Self::GreaterEqualsOperation  (left, right) => format!("({} >= {})", left.fmt(indent), right.fmt(indent)),
-            Self::LessOperation           (left, right) => format!("({} < {})", left.fmt(indent), right.fmt(indent)),
-            Self::LessEqualsOperation     (left, right) => format!("({} <= {})", left.fmt(indent), right.fmt(indent)),
-            Self::AdditionOperation       (left, right) => format!("({} + {})", left.fmt(indent), right.fmt(indent)),
-            Self::SubtractionOperation    (left, right) => format!("({} - {})", left.fmt(indent), right.fmt(indent)),
-            Self::MultiplicationOperation (left, right) => format!("({} * {})", left.fmt(indent), right.fmt(indent)),
-            Self::DivisionOperation       (left, right) => format!("({} / {})", left.fmt(indent), right.fmt(indent)),
+            Self::EqualsOperation         (left, right) => format!("({} == {})", left.format(indent), right.format(indent)),
+            Self::NotEqualsOperation      (left, right) => format!("({} != {})", left.format(indent), right.format(indent)),
+            Self::GreaterOperation        (left, right) => format!("({} > {})", left.format(indent), right.format(indent)),
+            Self::GreaterEqualsOperation  (left, right) => format!("({} >= {})", left.format(indent), right.format(indent)),
+            Self::LessOperation           (left, right) => format!("({} < {})", left.format(indent), right.format(indent)),
+            Self::LessEqualsOperation     (left, right) => format!("({} <= {})", left.format(indent), right.format(indent)),
+            Self::AdditionOperation       (left, right) => format!("({} + {})", left.format(indent), right.format(indent)),
+            Self::SubtractionOperation    (left, right) => format!("({} - {})", left.format(indent), right.format(indent)),
+            Self::MultiplicationOperation (left, right) => format!("({} * {})", left.format(indent), right.format(indent)),
+            Self::DivisionOperation       (left, right) => format!("({} / {})", left.format(indent), right.format(indent)),
 
-            Self::Atom(atom) => atom.fmt(indent)
+            Self::Atom(atom) => atom.format(indent)
 
         }
     }
@@ -138,20 +139,20 @@ impl Expression {
 
 
 impl Atom {
-    fn fmt(&self, indent : usize) -> String {
+    fn format(&self, indent : usize) -> String {
         return match (self) {
 
-            Self::Literal(lit) => lit.fmt(indent),
+            Self::Literal(lit) => lit.format(indent),
 
-            Self::Expression(expr) => expr.fmt(indent),
+            Self::Expression(expr) => expr.format(indent),
 
             Self::If(ifs, els) => {
                 format!("{}{}{}",
                     c!(KEYWORD, "if"),
                     ifs.iter()
                         .map(|i| format!(" ({}) {}",
-                            i.0.fmt(indent),
-                            i.1.fmt(indent)
+                            i.0.format(indent),
+                            i.1.format(indent)
                         ))
                         .collect::<Vec<String>>()
                         .join(&format!("\n{}{}",
@@ -162,7 +163,7 @@ impl Atom {
                         format!("\n{}{} {}",
                             INDENT.repeat(indent),
                             c!(KEYWORD, "else"),
-                            els.fmt(indent)
+                            els.format(indent)
                         )
                     } else {
                         String::new()
@@ -176,7 +177,7 @@ impl Atom {
 
 
 impl Literal {
-    fn fmt(&self, _indent : usize) -> String {
+    fn format(&self, _indent : usize) -> String {
         return match (self) {
 
             Self::Int(int) => c!(LIT_NUMERIC, int),
@@ -196,18 +197,23 @@ impl Literal {
 
 
 impl Block {
-    fn fmt(&self, indent : usize) -> String {
+    fn format(&self, indent : usize) -> String {
         return format!("{{{}{}\n{}}}",
             self.stmts.iter()
                 .map(|stmt| format!("\n{}{}",
                     INDENT.repeat(indent + 1),
-                    stmt.fmt(indent + 1)
+                    stmt.format(indent + 1)
                 ))
                 .collect::<Vec<String>>()
                 .join(";"),
             if (self.retlast) {""} else {";"},
             INDENT.repeat(indent)
         );
+    }
+}
+impl Debug for Block {
+    fn fmt(&self, f : &mut Formatter<'_>) -> Result {
+        return write!(f, "{{...}}");
     }
 }
 
