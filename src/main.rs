@@ -1,9 +1,11 @@
 #![allow(unused_parens)]
+#![feature(decl_macro)]
 
 
 pub mod parser;
+pub mod run;
 
 
 fn main() {
-    parser::read("examples/structs.vsv");
+    parser::parse("examples/basic.vsv");
 }

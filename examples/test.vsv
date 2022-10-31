@@ -1,23 +1,15 @@
-use std::{
-    io::{stdout, stdin},
-    rand,
-    control = c,
-    type::*
-};
+use std::consts::true;
 
 #[entry]
-pub let main = ||{
-    stdout::writeln("Welcome to the number guessing example.");
-
-    let mut tries_left = 8;
-    let     answer     =  rand::randi_range(0, 99);
-
-    c::while(
-        || bool {~const::true;},
-        ||{
-            stdout::writeln("You have " + tries_left.to_string() + " tries left.");
-            stdout::write("Enter a number:");
-            let guess = stdin::read_uint();
-        }
-    );
-};
+pub fn main() {
+    let x = 1;
+    x += 1;
+    if (x == 2 && true) {
+//  ^^  ^^^^^^    ^^^^
+//  |   ^^^^^^^^^^^^^^ Unnecessary : Always true.
+//  ^ Unnecessary : Empty if block.
+    } else {
+//    ^^^^ Unnecessary : Unreachable .
+//    ^^^^ Unnecessary : Empty else block.
+    }
+}

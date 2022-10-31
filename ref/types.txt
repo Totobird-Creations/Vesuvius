@@ -1,0 +1,22 @@
+Builtins:
+
+void   : ()
+byte   : u8
+int    : i64
+uint   : u64
+float  : f64
+ufloat : f64
+bool   : bool
+ptr
+array  : [,]
+tuple  : (,)
+list   : Vec
+|,|{;} : fn
+struct
+trait
+
+
+Standard Library:
+
+string : String
+map    : std::collections::HashMap
