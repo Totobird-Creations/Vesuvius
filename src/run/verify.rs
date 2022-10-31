@@ -9,31 +9,50 @@ use crate::run::types::*;
 // verify     : Check contents for errors.
 
 
-pub enum ContextParent<'l> {
-    Global(&'l mut GlobalContext),
-    Simple(&'l mut Context<'l>)
+pub enum ContextParent {
+    Global(GlobalContext),
+    Simple(Context)
+}
+impl ContextParent {
+    pub fn unwrap_global(self) -> GlobalContext {
+        return if let Self::Global(c) = self {
+            c
+        } else {
+            panic!("INTERNAL ERROR");
+        }
+    }
+    pub fn unwrap_simple(self) -> GlobalContext {
+        return if let Self::Simple(c) = self {
+            c
+        } else {
+            panic!("INTERNAL ERROR");
+        }
+    }
 }
 pub struct GlobalContext {
     entry : Option<Vec<String>>
 }
-pub struct Context<'l> {
+pub struct Context {
     pub module  : Vec<String>,
     pub symbols : HashMap<String, (DeclarationVisibility, Value)>,
-    pub parent  : ContextParent<'l>
+    pub parent  : Box<ContextParent>
 }
-impl<'l> Context<'l> {
-    fn subcontext(&'l mut self) -> Self {
+impl Context {
+    fn subcontext(self) -> Self {
         return Self {
             module  : self.module.clone(),
             symbols : HashMap::new(),
-            parent  : ContextParent::Simple(self)
+            parent  : Box::new(ContextParent::Simple(self))
         };
+    }
+    fn rip_parent(self) -> ContextParent {
+        return *self.parent;
     }
 }
 
 
 impl Program {
-    pub fn verify<'l>(&self, global : &'l mut GlobalContext) {
+    pub fn verify(&self, global : GlobalContext) -> GlobalContext {
         let mut context = Context {
             module  : Vec::new(),
             symbols : HashMap::new(),
@@ -49,6 +68,7 @@ impl Program {
             decl.verify(&mut context);
         }
         println!("{:?}", context.symbols);
+        return context.rip_parent().unwrap_global();
     }
 }
 
@@ -56,7 +76,7 @@ impl Program {
 
 impl Declaration {
 
-    pub fn pre_verify<'l>(&self, context : &'l mut Context<'l>) {
+    pub fn pre_verify(&self, context : &mut Context) {
         match (&self.decl) {
 
             DeclarationType::Function(name, _, _, _) => {
@@ -72,14 +92,14 @@ impl Declaration {
 
         }
 
-        self.decl.pre_verify(self.vis, context)
+        self.decl.pre_verify(self.vis, context);
     }
 
-    pub fn mid_verify<'l>(&self, context : &'l mut Context<'l>) {
+    pub fn mid_verify(&self, context : &mut Context) {
         self.decl.mid_verify(context);
     }
 
-    pub fn verify<'l>(&self, context : &'l mut Context<'l>) {
+    pub fn verify(&self, context : &mut Context) {
         self.decl.verify(context);
     }
 
@@ -88,7 +108,7 @@ impl Declaration {
 
 impl DeclarationType {
 
-    pub fn pre_verify<'l>(&self, vis : DeclarationVisibility, context : &'l mut Context<'l>) {
+    pub fn pre_verify(&self, vis : DeclarationVisibility, context : &mut Context) {
         match (self) {
 
             Self::Function(name, _, _, block) => {
@@ -104,7 +124,7 @@ impl DeclarationType {
         }
     }
 
-    pub fn mid_verify<'l>(&self, context : &'l mut Context<'l>) {
+    pub fn mid_verify(&self, context : &mut Context) {
         match (self) {
 
             Self::Function(name, args, ret, _) => {
@@ -114,7 +134,7 @@ impl DeclarationType {
                             .map(|(argname, arg)| (argname.clone(), into_value_type(arg)))
                             .collect()
                     );
-                    *vret  = Box::new(ret.clone().map_or(None, |ret|Some(into_value_type(&ret))));
+                    *vret = Box::new(ret.clone().map_or(None, |ret|Some(into_value_type(&ret))));
                 } else {
                     panic!("INTERNAL ERROR");
                 }
@@ -123,8 +143,7 @@ impl DeclarationType {
         }
     }
 
-    pub fn verify<'l>(&self, context : &'l mut Context<'l>) {
-        
+    pub fn verify(&self, context : &mut Context) {
         match (&self) {
 
             DeclarationType::Function(name, _, _, _) => {
@@ -162,15 +181,15 @@ impl DeclarationType {
 
 impl Statement {
 
-    pub fn pre_verify<'l>(&self, context : &'l mut Context<'l>) {
+    pub fn pre_verify(&self, context : &mut Context) {
         todo!();
     }
 
-    pub fn mid_verify<'l>(&self, context : &'l mut Context<'l>) {
+    pub fn mid_verify(&self, context : &mut Context) {
         todo!();
     }
 
-    pub fn verify<'l>(&self, context : &'l mut Context<'l>) {
+    pub fn verify(&self, context : &mut Context) {
         todo!();
     }
     
