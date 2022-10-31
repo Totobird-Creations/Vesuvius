@@ -9,12 +9,35 @@ use crate::run::types::*;
 // verify     : Check contents for errors.
 
 
+pub enum ContextParent<'l> {
+    Global(&'l mut GlobalContext),
+    Simple(&'l mut Context<'l>)
+}
+pub struct GlobalContext {
+    entry : Option<Vec<String>>
+}
+pub struct Context<'l> {
+    pub module  : Vec<String>,
+    pub symbols : HashMap<String, (DeclarationVisibility, Value)>,
+    pub parent  : ContextParent<'l>
+}
+impl<'l> Context<'l> {
+    fn subcontext(&'l mut self) -> Self {
+        return Self {
+            module  : self.module.clone(),
+            symbols : HashMap::new(),
+            parent  : ContextParent::Simple(self)
+        };
+    }
+}
+
+
 impl Program {
-    pub fn verify(&self) {
+    pub fn verify<'l>(&self, global : &'l mut GlobalContext) {
         let mut context = Context {
-            entry   : None,
             module  : Vec::new(),
-            symbols : HashMap::new()
+            symbols : HashMap::new(),
+            parent  : ContextParent::Global(global)
         };
         for decl in &self.decls {
             decl.pre_verify(&mut context);
@@ -23,7 +46,7 @@ impl Program {
             decl.mid_verify(&mut context);
         }
         for decl in &self.decls {
-            decl.verify(&context);
+            decl.verify(&mut context);
         }
         println!("{:?}", context.symbols);
     }
@@ -33,7 +56,7 @@ impl Program {
 
 impl Declaration {
 
-    pub fn pre_verify(&self, context : &mut Context) {
+    pub fn pre_verify<'l>(&self, context : &'l mut Context<'l>) {
         match (&self.decl) {
 
             DeclarationType::Function(name, _, _, _) => {
@@ -52,11 +75,11 @@ impl Declaration {
         self.decl.pre_verify(self.vis, context)
     }
 
-    pub fn mid_verify(&self, context : &mut Context) {
+    pub fn mid_verify<'l>(&self, context : &'l mut Context<'l>) {
         self.decl.mid_verify(context);
     }
 
-    pub fn verify(&self, context : &Context) {
+    pub fn verify<'l>(&self, context : &'l mut Context<'l>) {
         self.decl.verify(context);
     }
 
@@ -65,7 +88,7 @@ impl Declaration {
 
 impl DeclarationType {
 
-    pub fn pre_verify(&self, vis : DeclarationVisibility, context : &mut Context) {
+    pub fn pre_verify<'l>(&self, vis : DeclarationVisibility, context : &'l mut Context<'l>) {
         match (self) {
 
             Self::Function(name, _, _, block) => {
@@ -81,7 +104,7 @@ impl DeclarationType {
         }
     }
 
-    pub fn mid_verify(&self, context : &mut Context) {
+    pub fn mid_verify<'l>(&self, context : &'l mut Context<'l>) {
         match (self) {
 
             Self::Function(name, args, ret, _) => {
@@ -100,13 +123,13 @@ impl DeclarationType {
         }
     }
 
-    pub fn verify(&self, context : &Context) {
+    pub fn verify<'l>(&self, context : &'l mut Context<'l>) {
         
         match (&self) {
 
             DeclarationType::Function(name, _, _, _) => {
-                if let Value::FuncType(args, ret, body) = &context.symbols.get(name).unwrap().1 {
-                    let mut subcontext = context.clone();
+                if let Value::FuncType(args, ret, body) = context.symbols.get(name).unwrap().1.clone() {
+                    let mut subcontext = context.subcontext();
                     let mut done_args  = Vec::new();
                     for arg in args.iter() {
                         if (done_args.contains(&&arg.0)) {
@@ -115,13 +138,13 @@ impl DeclarationType {
                         }
                         done_args.push(&arg.0);
                         subcontext.symbols.insert(arg.0.clone(), (DeclarationVisibility::Public, arg.1.clone()));
-                        for stmt in body.stmts {
+                        for stmt in &body.stmts {
                             stmt.pre_verify(&mut subcontext);
                         }
-                        for stmt in body.stmts {
+                        for stmt in &body.stmts {
                             stmt.mid_verify(&mut subcontext);
                         }
-                        for stmt in body.stmts {
+                        for stmt in &body.stmts {
                             stmt.verify(&mut subcontext);
                         }
                     }
@@ -139,15 +162,15 @@ impl DeclarationType {
 
 impl Statement {
 
-    pub fn pre_verify(&self, context : &mut Context) {
+    pub fn pre_verify<'l>(&self, context : &'l mut Context<'l>) {
         todo!();
     }
 
-    pub fn mid_verify(&self, context : &mut Context) {
+    pub fn mid_verify<'l>(&self, context : &'l mut Context<'l>) {
         todo!();
     }
 
-    pub fn verify(&self, context : &mut Context) {
+    pub fn verify<'l>(&self, context : &'l mut Context<'l>) {
         todo!();
     }
     

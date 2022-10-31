@@ -7,18 +7,7 @@ use num_bigint::{
     BigInt,
     BigUint
 };
-use num_bigfloat::{
-    BigFloat
-};
-
-
-
-#[derive(Clone)]
-pub struct Context<'l> {
-    pub module  : Vec<String>,
-    pub symbols : HashMap<String, (DeclarationVisibility, Value)>,
-    pub parent  : Option<&'l Context<'l>>
-}
+use num_bigfloat::BigFloat;
 
 
 #[derive(Debug, Clone)]
