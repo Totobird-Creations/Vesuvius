@@ -14,10 +14,10 @@ use num_bigfloat::{
 
 
 #[derive(Clone)]
-pub struct Context {
-    pub entry   : Option<Vec<String>>,
+pub struct Context<'l> {
     pub module  : Vec<String>,
-    pub symbols : HashMap<String, (DeclarationVisibility, Value)>
+    pub symbols : HashMap<String, (DeclarationVisibility, Value)>,
+    pub parent  : Option<&'l Context<'l>>
 }
 
 
@@ -25,7 +25,8 @@ pub struct Context {
 pub enum ValConstr<T : PartialEq + PartialOrd> {
     AnyOf    (Box<Vec<ValConstr<T>>>), // List of possible constraints
     InRange  (T, T),                   // Min (inclusive), Max (exclusive)
-    IsValue  (T)                       // Value
+    IsValue  (T),                      // Value
+    None                               // Unconstrained
 }
 impl<T : PartialEq + PartialOrd> ValConstr<T> {
 
@@ -36,71 +37,39 @@ impl<T : PartialEq + PartialOrd> ValConstr<T> {
 
             ValConstr::InRange(min, max) => value >= min && value < max,
 
-            ValConstr::IsValue(v) => value == v
+            ValConstr::IsValue(v) => value == v,
+
+            ValConstr::None => true
 
         }
     }
 
 }
+
 
 
 #[derive(Debug, Clone)]
 pub enum Value {
     Void,
 
-    FuncType(Vec<(String, Type)>, Option<Type>, Block),
+    FuncType(Box<Vec<(String, Value)>>, Box<Option<Value>>, Block),
 
     Int(ValConstr<BigInt>),
     Uint(ValConstr<BigUint>),
 
     Float(BigFloat),
-    UFloat(BigFloat)
+    Ufloat(BigFloat)
 
 }
-
-
-
-impl Declaration {
-    pub fn pre_verify(&self, context : &mut Context) {
-        match (&self.decl) {
-
-            DeclarationType::Function(name, args, ret, block) => {
-                for header in &self.headers {
-                    if let DeclarationHeader::Entry = header {
-                        if matches!(context.entry, Some(_)) {
-                            // TODO : ADD PROPER ERROR
-                            panic!("Duplicate `{}` definition.", header.format(0));
-                        } else if ! matches!(self.vis, DeclarationVisibility::Public) {
-                            // TODO : ADD PROPER ERROR
-                            panic!("`{}` functions must be `{}`.", header.format(0), DeclarationVisibility::Public.format(0));
-                        } else {
-                            let mut loc = context.module.clone();
-                            loc.push(name.clone());
-                            context.entry = Some(loc);
-                        }
-                    } else {
-                        // TODO : ADD PROPER ERROR
-                        panic!("Header `{}` can not be used on functions.", header.format(0));
-                    }
-                }
-            }
-
-        }
-
-        self.decl.pre_verify(self.vis, context)
+pub fn into_value_type(typ : &TypeDescriptor) -> Value {
+    match (&typ.parts) {
+        TypeDescriptorParts::BuiltIn(name) => into_builtin_value_type(&name, &typ.constr),
+        TypeDescriptorParts::Custom(parts) => into_custom_value_type(&parts, &typ.constr)
     }
 }
-
-impl DeclarationType {
-    pub fn pre_verify(&self, vis : DeclarationVisibility, context : &mut Context) {
-        match (self) {
-
-            Self::Function(name, args, ret, block) => {
-                context.symbols.insert(name.clone(), (vis, Value::FuncType(
-                    args.clone(), ret.clone(), block.clone()
-                )));
-            }
-
-        }
-    }
+fn into_builtin_value_type(_name : &str, _constr : &HashMap<String, Literal>) -> Value {
+    todo!();
+}
+fn into_custom_value_type(_parts : &Vec<String>, _constr : &HashMap<String, Literal>) -> Value {
+    todo!();
 }

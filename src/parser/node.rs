@@ -25,10 +25,10 @@ pub enum DeclarationVisibility {
 #[derive(Debug)]
 pub enum DeclarationType {
     Function(
-        String,              // Name
-        Vec<(String, Type)>, // Arguments
-        Option<Type>,        // Return
-        Block                // Block
+        String,                        // Name
+        Vec<(String, TypeDescriptor)>, // Arguments
+        Option<TypeDescriptor>,        // Return
+        Block                          // Block
     )
 }
 
@@ -85,9 +85,14 @@ pub enum Literal {
 
 
 #[derive(Debug, Clone)]
-pub struct Type {
-    parts  : Vec<String>,
-    constr : HashMap<String, Literal>
+pub enum TypeDescriptorParts {
+    BuiltIn(String),
+    Custom(Vec<String>)
+}
+#[derive(Debug, Clone)]
+pub struct TypeDescriptor {
+    pub parts  : TypeDescriptorParts,
+    pub constr : HashMap<String, Literal>
 }
 
 
