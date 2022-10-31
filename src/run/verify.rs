@@ -22,6 +22,9 @@ impl Program {
         for decl in &self.decls {
             decl.mid_verify(&mut context);
         }
+        for decl in &self.decls {
+            decl.verify(&context);
+        }
         println!("{:?}", context.symbols);
     }
 }
@@ -54,26 +57,7 @@ impl Declaration {
     }
 
     pub fn verify(&self, context : &Context) {
-        match (&self.decl) {
-
-            DeclarationType::Function(name, _, _, _) => {
-                if let Value::FuncType(args, ret, body) = &context.symbols.get(name).unwrap().1 {
-                    let mut subcontext = context.clone();
-                    let mut done_args  = Vec::new();
-                    for arg in args.iter() {
-                        if (done_args.contains(&&arg.0)) {
-                            // TODO : Proper error
-                            panic!("Duplicate argument name.");
-                        }
-                        done_args.push(&arg.0);
-                        subcontext.symbols.insert(arg.0.clone(), (DeclarationVisibility::Public, arg.1.clone()));
-                    }
-                } else {
-                    panic!("INTENRAL ERROR");
-                }
-            }
-
-        }
+        self.decl.verify(context);
     }
 
 }
@@ -116,4 +100,55 @@ impl DeclarationType {
         }
     }
 
+    pub fn verify(&self, context : &Context) {
+        
+        match (&self) {
+
+            DeclarationType::Function(name, _, _, _) => {
+                if let Value::FuncType(args, ret, body) = &context.symbols.get(name).unwrap().1 {
+                    let mut subcontext = context.clone();
+                    let mut done_args  = Vec::new();
+                    for arg in args.iter() {
+                        if (done_args.contains(&&arg.0)) {
+                            // TODO : Proper error
+                            panic!("Duplicate argument name.");
+                        }
+                        done_args.push(&arg.0);
+                        subcontext.symbols.insert(arg.0.clone(), (DeclarationVisibility::Public, arg.1.clone()));
+                        for stmt in body.stmts {
+                            stmt.pre_verify(&mut subcontext);
+                        }
+                        for stmt in body.stmts {
+                            stmt.mid_verify(&mut subcontext);
+                        }
+                        for stmt in body.stmts {
+                            stmt.verify(&mut subcontext);
+                        }
+                    }
+                } else {
+                    panic!("INTENRAL ERROR");
+                }
+            }
+
+        }
+    }
+
+}
+
+
+
+impl Statement {
+
+    pub fn pre_verify(&self, context : &mut Context) {
+        todo!();
+    }
+
+    pub fn mid_verify(&self, context : &mut Context) {
+        todo!();
+    }
+
+    pub fn verify(&self, context : &mut Context) {
+        todo!();
+    }
+    
 }
