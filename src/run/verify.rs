@@ -1,4 +1,12 @@
 use std::collections::HashMap;
+use std::sync::{
+    Mutex,
+    MutexGuard
+};
+use std::str::FromStr;
+
+use num_bigint::BigInt;
+use num_bigfloat::BigFloat;
 
 use crate::parser::node::*;
 use crate::run::types::*;
@@ -9,188 +17,80 @@ use crate::run::types::*;
 // verify     : Check contents for errors.
 
 
-pub enum ContextParent {
-    Global(GlobalContext),
-    Simple(Context)
-}
-impl ContextParent {
-    pub fn unwrap_global(self) -> GlobalContext {
-        return if let Self::Global(c) = self {
-            c
-        } else {
-            panic!("INTERNAL ERROR");
-        }
-    }
-    pub fn unwrap_simple(self) -> GlobalContext {
-        return if let Self::Simple(c) = self {
-            c
-        } else {
-            panic!("INTERNAL ERROR");
-        }
-    }
-}
-pub struct GlobalContext {
-    entry : Option<Vec<String>>
-}
-pub struct Context {
-    pub module  : Vec<String>,
-    pub symbols : HashMap<String, (DeclarationVisibility, Value)>,
-    pub parent  : Box<ContextParent>
-}
-impl Context {
-    fn subcontext(self) -> Self {
-        return Self {
-            module  : self.module.clone(),
-            symbols : HashMap::new(),
-            parent  : Box::new(ContextParent::Simple(self))
-        };
-    }
-    fn rip_parent(self) -> ContextParent {
-        return *self.parent;
-    }
-}
-
-
 impl Program {
-    pub fn verify(&self, global : GlobalContext) -> GlobalContext {
-        let mut context = Context {
-            module  : Vec::new(),
-            symbols : HashMap::new(),
-            parent  : ContextParent::Global(global)
-        };
-        for decl in &self.decls {
-            decl.pre_verify(&mut context);
-        }
-        for decl in &self.decls {
-            decl.mid_verify(&mut context);
-        }
-        for decl in &self.decls {
-            decl.verify(&mut context);
-        }
-        println!("{:?}", context.symbols);
-        return context.rip_parent().unwrap_global();
+    pub fn verify(&self) -> Value {
+        
     }
 }
-
 
 
 impl Declaration {
-
-    pub fn pre_verify(&self, context : &mut Context) {
-        match (&self.decl) {
-
-            DeclarationType::Function(name, _, _, _) => {
-                for header in &self.headers {
-                    if let DeclarationHeader::Entry = header {
-                        todo!();
-                    } else {
-                        // TODO : ADD PROPER ERROR
-                        panic!("Header `{}` can not be used on functions.", header.format(0));
-                    }
-                }
-            }
-
-        }
-
-        self.decl.pre_verify(self.vis, context);
+    pub fn verify(&self) -> Value {
+        
     }
-
-    pub fn mid_verify(&self, context : &mut Context) {
-        self.decl.mid_verify(context);
-    }
-
-    pub fn verify(&self, context : &mut Context) {
-        self.decl.verify(context);
-    }
-
 }
-
-
-impl DeclarationType {
-
-    pub fn pre_verify(&self, vis : DeclarationVisibility, context : &mut Context) {
-        match (self) {
-
-            Self::Function(name, _, _, block) => {
-                context.symbols.insert(name.clone(), (vis,
-                    Value::FuncType(
-                        Box::new(Vec::new()),
-                        Box::new(None),
-                        block.clone()
-                    )
-                ));
-            }
-
-        }
-    }
-
-    pub fn mid_verify(&self, context : &mut Context) {
-        match (self) {
-
-            Self::Function(name, args, ret, _) => {
-                if let Value::FuncType(ref mut vargs, ref mut vret, _) = &mut context.symbols.get_mut(name).unwrap().1 {
-                    *vargs = Box::new(
-                        args.clone().iter()
-                            .map(|(argname, arg)| (argname.clone(), into_value_type(arg)))
-                            .collect()
-                    );
-                    *vret = Box::new(ret.clone().map_or(None, |ret|Some(into_value_type(&ret))));
-                } else {
-                    panic!("INTERNAL ERROR");
-                }
-            }
-
-        }
-    }
-
-    pub fn verify(&self, context : &mut Context) {
-        match (&self) {
-
-            DeclarationType::Function(name, _, _, _) => {
-                if let Value::FuncType(args, ret, body) = context.symbols.get(name).unwrap().1.clone() {
-                    let mut subcontext = context.subcontext();
-                    let mut done_args  = Vec::new();
-                    for arg in args.iter() {
-                        if (done_args.contains(&&arg.0)) {
-                            // TODO : Proper error
-                            panic!("Duplicate argument name.");
-                        }
-                        done_args.push(&arg.0);
-                        subcontext.symbols.insert(arg.0.clone(), (DeclarationVisibility::Public, arg.1.clone()));
-                        for stmt in &body.stmts {
-                            stmt.pre_verify(&mut subcontext);
-                        }
-                        for stmt in &body.stmts {
-                            stmt.mid_verify(&mut subcontext);
-                        }
-                        for stmt in &body.stmts {
-                            stmt.verify(&mut subcontext);
-                        }
-                    }
-                } else {
-                    panic!("INTENRAL ERROR");
-                }
-            }
-
-        }
-    }
-
-}
-
 
 
 impl Statement {
-
-    pub fn pre_verify(&self, context : &mut Context) {
-        todo!();
+    pub fn verify(&self) -> Value {
+        
     }
+}
 
-    pub fn mid_verify(&self, context : &mut Context) {
-        todo!();
-    }
 
-    pub fn verify(&self, context : &mut Context) {
-        todo!();
+impl Expression {
+    pub fn verify(&self) -> Value {
+        return match (self) {
+
+            Self::EqualsOperation(left, right) => {
+                let lval = left.verify();
+                let rval = right.verify();
+                if (lval.matches_type(rval)) {
+                    lval.equals(rval)
+                } else {
+                    // TODO : PROPER ERROR
+                    panic!("Can not compare two values of different type.")
+                }
+            }
+
+        }
     }
-    
+}
+
+
+impl Atom {
+    pub fn verify(&self) -> Value {
+        return match (self) {
+
+            Self::Literal(lit) => lit.verify(),
+            
+            Self::Expression(expr) => expr.verify(),
+
+            Self::If(ifs, els) => {
+                todo!();
+            }
+            
+        }
+    }
+}
+
+
+impl Literal {
+    pub fn verify(&self) -> Value {
+        return match (self) {
+
+            Self::Int(val) => Value::Int(ValConstr::IsValue(
+                BigInt::from_str(val).unwrap()
+            )),
+
+            Self::Float(int, dec) => Value::Float(ValConstr::IsValue(
+                BigFloat::from_str(&format!("{}.{}", int, dec)).unwrap()
+            )),
+
+            Self::Identifier(name) => {
+                todo!();
+            }
+
+        }
+    }
 }
