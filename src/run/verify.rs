@@ -45,8 +45,8 @@ impl Expression {
             Self::EqualsOperation(left, right) => {
                 let lval = left.verify();
                 let rval = right.verify();
-                if (lval.matches_type(rval)) {
-                    lval.equals(rval)
+                if (lval.matches_type(&rval)) {
+                    lval.equals(&rval)
                 } else {
                     // TODO : PROPER ERROR
                     panic!("Can not compare two values of different type.")
@@ -79,11 +79,11 @@ impl Literal {
     pub fn verify(&self) -> Value {
         return match (self) {
 
-            Self::Int(val) => Value::Int(ValConstr::IsValue(
+            Self::Int(val) => Value::Int(ValConstr::Eq(
                 BigInt::from_str(val).unwrap()
             )),
 
-            Self::Float(int, dec) => Value::Float(ValConstr::IsValue(
+            Self::Float(int, dec) => Value::Float(ValConstr::Eq(
                 BigFloat::from_str(&format!("{}.{}", int, dec)).unwrap()
             )),
 

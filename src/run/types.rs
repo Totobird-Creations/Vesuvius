@@ -9,26 +9,41 @@ use num_bigfloat::BigFloat;
 
 #[derive(Debug, Clone)]
 pub enum ValConstr<T : PartialEq + PartialOrd> {
-    AnyOf (Box<Vec<ValConstr<T>>>), // List of possible constraints
-    GtEq  (T),                      // Min (inclusive)
-    LtEq  (T),                      // Max (inclusive)
-    Eq    (T),                      // Value
-    None                            // Unconstrained
+    And  (Box<ValConstr<T>>, Box<ValConstr<T>>),
+    Or   (Box<ValConstr<T>>, Box<ValConstr<T>>),
+    Not  (Box<ValConstr<T>>),
+    Eq   (T),
+    Ne   (T),
+    Gt   (T),
+    GtEq (T),
+    Lt   (T),
+    LtEq (T),
+    Unconstrained
 }
 impl<T : PartialEq + PartialOrd> ValConstr<T> {
 
     pub fn test(&self, value : &T) -> bool {
         return match (self) {
 
-            ValConstr::AnyOf(vs) => vs.iter().any(|v| v.test(value)),
+            Self::And(a, b) => a.test(value) && b.test(value),
 
-            ValConstr::GtEq(min) => value >= min,
+            Self::Or(a, b) => a.test(value) || b.test(value),
 
-            ValConstr::LtEq(max) => value <= max,
+            Self::Not(a) => ! a.test(value),
 
-            ValConstr::Eq(v) => value == v,
+            Self::Eq(a) => value == a,
 
-            ValConstr::None => true
+            Self::Ne(a) => value != a,
+
+            Self::Gt(a) => value > a,
+
+            Self::GtEq(a) => value >= a,
+
+            Self::Lt(a) => value < a,
+
+            Self::LtEq(a) => value <= a,
+
+            Self::Unconstrained => true
 
         }
     }
@@ -38,45 +53,209 @@ impl<T : PartialEq + PartialOrd> ValConstr<T> {
     pub fn confines(&self, other : &ValConstr<T>) -> bool {
         return match (self) {
 
-            ValConstr::AnyOf(vs) => vs.iter().all(|v| self.confines(v)),
+            Self::And(a, b) => a.confines(other) && b.confines(other),
 
-            ValConstr::GtEq(min) => {
+            Self::Or(a, b) => a.confines(other) || b.confines(other),
+
+            Self::Not(a) => todo!(),
+
+            Self::Eq(a) => {
                 match (other) {
-                    ValConstr::AnyOf (othervs)  => {
-                        othervs.iter().all(|otherv| self.confines(otherv))
-                    },
-                    ValConstr::GtEq  (othermin) => {othermin >= min},
-                    ValConstr::LtEq  (_)        => {false},
-                    ValConstr::Eq    (otherv)   => {otherv > min},
-                    ValConstr::None             => {false}
+                    Self::And(c, d)     => todo!(),
+                    Self::Or(c, d)      => todo!(),
+                    Self::Not(c)        => todo!(),
+                    Self::Eq(c)         => a == c,
+                    Self::Ne(c)         => false,
+                    Self::Gt(c)         => false,
+                    Self::GtEq(c)       => false,
+                    Self::Lt(c)         => false,
+                    Self::LtEq(c)       => false,
+                    Self::Unconstrained => false
                 }
             },
 
-            ValConstr::LtEq(max) => {
+            Self::Ne(a) => {
                 match (other) {
-                    ValConstr::AnyOf (othervs)  => {
-                        othervs.iter().all(|otherv| self.confines(otherv))
-                    },
-                    ValConstr::GtEq  (_)        => {false},
-                    ValConstr::LtEq  (othermax) => {othermax <= max},
-                    ValConstr::Eq    (otherv)   => {otherv < max},
-                    ValConstr::None             => {false}
+                    Self::And(c, d)     => todo!(),
+                    Self::Or(c, d)      => todo!(),
+                    Self::Not(c)        => todo!(),
+                    Self::Eq(c)         => a != c,
+                    Self::Ne(c)         => a == c,
+                    Self::Gt(c)         => a <= c,
+                    Self::GtEq(c)       => a < c,
+                    Self::Lt(c)         => a >= c,
+                    Self::LtEq(c)       => a > c,
+                    Self::Unconstrained => false
                 }
             },
 
-            ValConstr::Eq(v) => {
+            Self::Gt(a) => {
                 match (other) {
-                    ValConstr::AnyOf (othervs)  => {
-                        othervs.iter().all(|otherv| self.confines(otherv))
-                    },
-                    ValConstr::GtEq  (_)        => {false},
-                    ValConstr::LtEq  (_)        => {false},
-                    ValConstr::Eq    (otherv)   => {otherv == v},
-                    ValConstr::None             => {false}
+                    Self::And(c, d)     => todo!(),
+                    Self::Or(c, d)      => todo!(),
+                    Self::Not(c)        => todo!(),
+                    Self::Eq(c)         => a < c,
+                    Self::Ne(c)         => false,
+                    Self::Gt(c)         => a <= c,
+                    Self::GtEq(c)       => a < c,
+                    Self::Lt(c)         => false,
+                    Self::LtEq(c)       => false,
+                    Self::Unconstrained => false
                 }
             },
 
-            ValConstr::None => true
+            Self::GtEq(a) => {
+                match (other) {
+                    Self::And(c, d)     => todo!(),
+                    Self::Or(c, d)      => todo!(),
+                    Self::Not(c)        => todo!(),
+                    Self::Eq(c)         => a <= c,
+                    Self::Ne(c)         => false,
+                    Self::Gt(c)         => a < c,
+                    Self::GtEq(c)       => a <= c,
+                    Self::Lt(c)         => false,
+                    Self::LtEq(c)       => false,
+                    Self::Unconstrained => false
+                }
+            },
+
+            Self::Lt(a) => {
+                match (other) {
+                    Self::And(c, d)     => todo!(),
+                    Self::Or(c, d)      => todo!(),
+                    Self::Not(c)        => todo!(),
+                    Self::Eq(c)         => a > c,
+                    Self::Ne(c)         => false,
+                    Self::Gt(c)         => false,
+                    Self::GtEq(c)       => false,
+                    Self::Lt(c)         => a >= c,
+                    Self::LtEq(c)       => a > c,
+                    Self::Unconstrained => false
+                }
+            },
+
+            Self::LtEq(a) => {
+                match (other) {
+                    Self::And(c, d)     => todo!(),
+                    Self::Or(c, d)      => todo!(),
+                    Self::Not(c)        => todo!(),
+                    Self::Eq(c)         => a >= c,
+                    Self::Ne(c)         => false,
+                    Self::Gt(c)         => false,
+                    Self::GtEq(c)       => false,
+                    Self::Lt(c)         => a > c,
+                    Self::LtEq(c)       => a >= c,
+                    Self::Unconstrained => false
+                }
+            },
+
+            Self::Unconstrained => true
+
+        }
+    }
+
+    // Checks if `self` is a larger bound than `other`.
+    // Any value that matches `other` must also match `self`.
+    pub fn intersects(&self, other : &ValConstr<T>) -> bool {
+        return match (self) {
+
+            Self::And(a, b) => a.confines(other) && b.confines(other),
+
+            Self::Or(a, b) => a.confines(other) || b.confines(other),
+
+            Self::Not(a) => todo!(),
+
+            Self::Eq(a) => {
+                match (other) {
+                    Self::And(c, d)     => todo!(),
+                    Self::Or(c, d)      => todo!(),
+                    Self::Not(c)        => todo!(),
+                    Self::Eq(c)         => a == c,
+                    Self::Ne(c)         => a != c,
+                    Self::Gt(c)         => a < c,
+                    Self::GtEq(c)       => a <= c,
+                    Self::Lt(c)         => a > c,
+                    Self::LtEq(c)       => a >= c,
+                    Self::Unconstrained => true
+                }
+            },
+
+            Self::Ne(a) => {
+                match (other) {
+                    Self::And(c, d)     => todo!(),
+                    Self::Or(c, d)      => todo!(),
+                    Self::Not(c)        => todo!(),
+                    Self::Eq(c)         => a != c,
+                    Self::Ne(c)         => true,
+                    Self::Gt(c)         => true,
+                    Self::GtEq(c)       => true,
+                    Self::Lt(c)         => true,
+                    Self::LtEq(c)       => true,
+                    Self::Unconstrained => true
+                }
+            },
+
+            Self::Gt(a) => {
+                match (other) {
+                    Self::And(c, d)     => todo!(),
+                    Self::Or(c, d)      => todo!(),
+                    Self::Not(c)        => todo!(),
+                    Self::Eq(c)         => a < c,
+                    Self::Ne(c)         => true,
+                    Self::Gt(c)         => true,
+                    Self::GtEq(c)       => true,
+                    Self::Lt(c)         => true,
+                    Self::LtEq(c)       => true,
+                    Self::Unconstrained => true
+                }
+            },
+
+            Self::GtEq(a) => {
+                match (other) {
+                    Self::And(c, d)     => todo!(),
+                    Self::Or(c, d)      => todo!(),
+                    Self::Not(c)        => todo!(),
+                    Self::Eq(c)         => todo!(),
+                    Self::Ne(c)         => todo!(),
+                    Self::Gt(c)         => todo!(),
+                    Self::GtEq(c)       => todo!(),
+                    Self::Lt(c)         => todo!(),
+                    Self::LtEq(c)       => todo!(),
+                    Self::Unconstrained => todo!()
+                }
+            },
+
+            Self::Lt(a) => {
+                match (other) {
+                    Self::And(c, d)     => todo!(),
+                    Self::Or(c, d)      => todo!(),
+                    Self::Not(c)        => todo!(),
+                    Self::Eq(c)         => todo!(),
+                    Self::Ne(c)         => todo!(),
+                    Self::Gt(c)         => todo!(),
+                    Self::GtEq(c)       => todo!(),
+                    Self::Lt(c)         => todo!(),
+                    Self::LtEq(c)       => todo!(),
+                    Self::Unconstrained => todo!()
+                }
+            },
+
+            Self::LtEq(a) => {
+                match (other) {
+                    Self::And(c, d)     => todo!(),
+                    Self::Or(c, d)      => todo!(),
+                    Self::Not(c)        => todo!(),
+                    Self::Eq(c)         => todo!(),
+                    Self::Ne(c)         => todo!(),
+                    Self::Gt(c)         => todo!(),
+                    Self::GtEq(c)       => todo!(),
+                    Self::Lt(c)         => todo!(),
+                    Self::LtEq(c)       => todo!(),
+                    Self::Unconstrained => todo!()
+                }
+            },
+
+            Self::Unconstrained => true
 
         }
     }
@@ -111,7 +290,7 @@ impl Value {
             if      let Self::Int(l) = self && let Self::Int(r) = other {todo!()}
             else if let Self::Float(l) = self && let Self::Float(r) = other {todo!()}
             else if let Self::Bool(l) = self && let Self::Bool(r) = other {todo!()}
-            else {false}
+            else {Value::Bool(ValConstr::Eq(false))}
     }
 
 }
