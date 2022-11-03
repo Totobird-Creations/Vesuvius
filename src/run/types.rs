@@ -11,20 +11,20 @@ use crate::parser::node::*;
 
 
 #[derive(Debug, Clone)]
-pub struct ValConstr<T : PartialEq>(Vec<T>);
+pub struct ValConstr<T : PartialEq>(pub Vec<T>);
 impl<T : PartialEq> ValConstr<T> {
     pub fn equals(&self, other : &ValConstr<T>) -> Value {
         let mut t = false;
         let mut f = false;
-        for sval in self.0 {
-            for oval in other.0 {
+        for sval in &self.0 {
+            for oval in &other.0 {
                 if (sval == oval) {t = true;}
                 if (sval != oval) {f = true;}
                 if (t && f) {break;}
             }
             if (t && f) {break;}
         }
-        let v = Vec::new();
+        let mut v = Vec::new();
         if (t) {v.push(true);}
         if (f) {v.push(false);}
         return Value::Bool(ValConstr(v));
@@ -32,19 +32,19 @@ impl<T : PartialEq> ValConstr<T> {
 }
 
 #[derive(Debug, Clone)]
-pub struct ValConstrOrd<T : PartialEq + PartialOrd>(Vec<ValConstrRange<T>>);
+pub struct ValConstrOrd<T : PartialEq + PartialOrd>(pub Vec<ValConstrRange<T>>);
 impl<T : PartialEq + PartialOrd> ValConstrOrd<T> {
     pub fn equals(&self, other : &ValConstrOrd<T>) -> Value {
         let mut t = false;
         let mut f = false;
-        for sval in self.0 {
-            for oval in other.0 {
+        for sval in &self.0 {
+            for oval in &other.0 {
                 sval.equals(&oval, &mut t, &mut f);
                 if (t && f) {break;}
             }
             if (t && f) {break;}
         }
-        let v = Vec::new();
+        let mut v = Vec::new();
         if (t) {v.push(true);}
         if (f) {v.push(false);}
         return Value::Bool(ValConstr(v));

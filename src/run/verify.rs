@@ -31,14 +31,15 @@ impl Declaration {
 
 impl Statement {
     pub fn verify(&self) -> Value {
-        match (self) {
+        return match (self) {
 
             Statement::Expression(expr) => {
                 expr.verify()
             },
 
             Statement::InitVar(_, _) => {
-                todo!();
+                // TODO
+                Value::Void
             }
 
         }
