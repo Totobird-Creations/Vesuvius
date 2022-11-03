@@ -5,9 +5,6 @@ use std::sync::{
 };
 use std::str::FromStr;
 
-use num_bigint::BigInt;
-use num_bigfloat::BigFloat;
-
 use crate::parser::node::*;
 use crate::run::types::*;
 
@@ -79,13 +76,13 @@ impl Literal {
     pub fn verify(&self) -> Value {
         return match (self) {
 
-            Self::Int(val) => Value::Int(ValConstr::Eq(
-                BigInt::from_str(val).unwrap()
-            )),
+            Self::Int(val) => Value::Int(ValConstr::Ranges(vec![ValConstrRange::Exact(
+                Value::Int(ValuePossiblyBigInt::from(val))
+            )])),
 
-            Self::Float(int, dec) => Value::Float(ValConstr::Eq(
-                BigFloat::from_str(&format!("{}.{}", int, dec)).unwrap()
-            )),
+            Self::Float(int, dec) => Value::Float(ValConstr::Ranges(vec![ValConstrRange::Exact(
+                Value::Float(ValuePossiblyBigFloat::from(&format!("{}.{}", int, dec)))
+            )])),
 
             Self::Identifier(name) => {
                 todo!();

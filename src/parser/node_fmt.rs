@@ -219,8 +219,9 @@ impl Debug for Block {
 
 
 
-macro c {
+macro_rules! c {
     ($colour:ident, $expr:expr) => {
         format!("{}{}\x1b[39m", $colour, $expr)
     }
 }
+use c;
