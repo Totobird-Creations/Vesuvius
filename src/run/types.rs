@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use std::cmp::Ordering;
+use std::str::FromStr;
 
 use num_bigint::{
     BigInt,
@@ -11,24 +11,96 @@ use crate::parser::node::*;
 
 
 #[derive(Debug, Clone)]
-pub enum ValConstr<T : PartialEq> {
-    None,           // No value matches
-    Values(Vec<T>), // A list of possible values
-    Full            // Any value matches
+pub struct ValConstr<T : PartialEq>(Vec<T>);
+impl<T : PartialEq> ValConstr<T> {
+    pub fn equals(&self, other : &ValConstr<T>) -> Value {
+        let mut t = false;
+        let mut f = false;
+        for sval in self.0 {
+            for oval in other.0 {
+                if (sval == oval) {t = true;}
+                if (sval != oval) {f = true;}
+                if (t && f) {break;}
+            }
+            if (t && f) {break;}
+        }
+        let v = Vec::new();
+        if (t) {v.push(true);}
+        if (f) {v.push(false);}
+        return Value::Bool(ValConstr(v));
+    }
 }
+
 #[derive(Debug, Clone)]
-pub enum ValConstrOrd<T : PartialEq + PartialOrd> {
-    None,                           // No value matches
-    Ranges(Vec<ValConstrRange<T>>), // A list of ranges
-    Full                            // Any value matches
+pub struct ValConstrOrd<T : PartialEq + PartialOrd>(Vec<ValConstrRange<T>>);
+impl<T : PartialEq + PartialOrd> ValConstrOrd<T> {
+    pub fn equals(&self, other : &ValConstrOrd<T>) -> Value {
+        let mut t = false;
+        let mut f = false;
+        for sval in self.0 {
+            for oval in other.0 {
+                sval.equals(&oval, &mut t, &mut f);
+                if (t && f) {break;}
+            }
+            if (t && f) {break;}
+        }
+        let v = Vec::new();
+        if (t) {v.push(true);}
+        if (f) {v.push(false);}
+        return Value::Bool(ValConstr(v));
+    }
 }
+
 #[derive(Debug, Clone)]
 pub enum ValConstrRange<T : PartialEq + PartialOrd> {
     Exact(T),
-    MinInMaxIn(T, T),
-    MinInMaxEx(T, T),
-    MinExMaxIn(T, T),
-    MinExMaxEx(T, T)
+    MinInMaxIn(T, T)
+}
+impl<T : PartialEq + PartialOrd> ValConstrRange<T> {
+    pub fn equals(&self, other : &ValConstrRange<T>, t : &mut bool, f : &mut bool) {
+        match (self) {
+
+            Self::Exact(a) => {
+                match (other) {
+
+                    Self::Exact(b) => {
+                        if (a == b) {*t = true;}
+                        else {*f = true;}
+                    },
+
+                    Self::MinInMaxIn(bi, ba) => {
+                        if (bi == a && ba == a) {*t = true;}
+                        else if (bi <= a && ba >= a) {*t = true; *f = true;}
+                        else {*f = true;}
+                    }
+                }
+            },
+
+            Self::MinInMaxIn(ai, aa) => {
+                match (other) {
+
+                    Self::Exact(b) => {
+                        if (ai == b && aa == b) {*t = true;}
+                        else if (ai <= b && aa >= b) {*t = true; *f = true;}
+                        else {*f = true;}
+                    },
+
+                    Self::MinInMaxIn(bi, ba) => {
+                        if (ai == bi && aa == ba) {*t = true;}
+                        else if (
+                               ai <= bi && aa >= bi
+                            || ai <= ba && aa >= ba
+                            || bi <= ai && ba >= ai
+                            || bi <= aa && ba >= aa
+                        ) {*t = true; *f = true;}
+                        else {*f = true;}
+                    }
+
+                }
+            }
+
+        }
+    }
 }
 
 
@@ -55,11 +127,11 @@ impl Value {
     }
 
     pub fn equals(&self, other : &Value) -> Value {
-        return match (self) {
-            Self::Int   (l) => match(other) {Self::Int   (r) => {todo!()}},
-            Self::Float (l) => match(other) {Self::Float (r) => {todo!()}},
-            Self::Bool  (l) => match(other) {Self::Bool  (r) => {todo!()}},
-            _ => {Value::Bool(ValConstr::Values(vec![false]))}
+        return match ((self, other)) {
+            (Self::Int   (l) , Self::Int   (r) ) => {l.equals(&r)},
+            (Self::Float (l) , Self::Float (r) ) => {l.equals(&r)},
+            (Self::Bool  (l) , Self::Bool  (r) ) => {l.equals(&r)},
+            _ => {Value::Bool(ValConstr(vec![false]))}
         };
     }
 
@@ -74,13 +146,13 @@ pub enum ValuePossiblyBigInt {
 impl PartialEq for ValuePossiblyBigInt {
     fn eq(&self, other : &Self) -> bool {
         match (self) {
-            ValuePossiblyBigInt::Small(a) => {match (other) {
-                ValuePossiblyBigInt::Small (b) => {a == b}
-                ValuePossiblyBigInt::Big   (b) => {&a.to_bigint().unwrap() == b}
+            Self::Small(a) => {match (other) {
+                Self::Small (b) => {a == b}
+                Self::Big   (b) => {&a.to_bigint().unwrap() == b}
             }},
-            ValuePossiblyBigInt::Big(a) => {match (other) {
-                ValuePossiblyBigInt::Small (b) => {a == &b.to_bigint().unwrap()}
-                ValuePossiblyBigInt::Big   (b) => {a == b}
+            Self::Big(a) => {match (other) {
+                Self::Small (b) => {a == &b.to_bigint().unwrap()}
+                Self::Big   (b) => {a == b}
             }}
         }
     }
@@ -88,14 +160,24 @@ impl PartialEq for ValuePossiblyBigInt {
 impl PartialOrd for ValuePossiblyBigInt {
     fn partial_cmp(&self, other : &Self) -> Option<Ordering> {
         match (self) {
-            ValuePossiblyBigInt::Small(a) => {match (other) {
-                ValuePossiblyBigInt::Small (b) => {a.partial_cmp(b)}
-                ValuePossiblyBigInt::Big   (b) => {a.to_bigint().unwrap().partial_cmp(b)}
+            Self::Small(a) => {match (other) {
+                Self::Small (b) => {a.partial_cmp(b)}
+                Self::Big   (b) => {a.to_bigint().unwrap().partial_cmp(b)}
             }},
-            ValuePossiblyBigInt::Big(a) => {match (other) {
-                ValuePossiblyBigInt::Small (b) => {a.partial_cmp(&b.to_bigint().unwrap())}
-                ValuePossiblyBigInt::Big   (b) => {a.partial_cmp(b)}
+            Self::Big(a) => {match (other) {
+                Self::Small (b) => {a.partial_cmp(&b.to_bigint().unwrap())}
+                Self::Big   (b) => {a.partial_cmp(b)}
             }}
+        }
+    }
+}
+impl From<&String> for ValuePossiblyBigInt {
+    fn from(value : &String) -> Self {
+        let res = value.parse::<i64>();
+        return if let Ok(res) = res {
+            Self::Small(res)
+        } else {
+            Self::Big(BigInt::from_str(value).unwrap())
         }
     }
 }
@@ -109,13 +191,13 @@ pub enum ValuePossiblyBigFloat {
 impl PartialEq for ValuePossiblyBigFloat {
     fn eq(&self, other : &Self) -> bool {
         match (self) {
-            ValuePossiblyBigFloat::Small(a) => {match (other) {
-                ValuePossiblyBigFloat::Small (b) => {a == b}
-                ValuePossiblyBigFloat::Big   (b) => {&BigFloat::from_f64(*a) == b}
+            Self::Small(a) => {match (other) {
+                Self::Small (b) => {a == b}
+                Self::Big   (b) => {&BigFloat::from_f64(*a) == b}
             }},
-            ValuePossiblyBigFloat::Big(a) => {match (other) {
-                ValuePossiblyBigFloat::Small (b) => {a == &BigFloat::from_f64(*b)}
-                ValuePossiblyBigFloat::Big   (b) => {a == b}
+            Self::Big(a) => {match (other) {
+                Self::Small (b) => {a == &BigFloat::from_f64(*b)}
+                Self::Big   (b) => {a == b}
             }}
         }
     }
@@ -123,14 +205,24 @@ impl PartialEq for ValuePossiblyBigFloat {
 impl PartialOrd for ValuePossiblyBigFloat {
     fn partial_cmp(&self, other : &Self) -> Option<Ordering> {
         match (self) {
-            ValuePossiblyBigFloat::Small(a) => {match (other) {
-                ValuePossiblyBigFloat::Small (b) => {a.partial_cmp(b)}
-                ValuePossiblyBigFloat::Big   (b) => {BigFloat::from_f64(*a).partial_cmp(b)}
+            Self::Small(a) => {match (other) {
+                Self::Small (b) => {a.partial_cmp(b)}
+                Self::Big   (b) => {BigFloat::from_f64(*a).partial_cmp(b)}
             }},
-            ValuePossiblyBigFloat::Big(a) => {match (other) {
-                ValuePossiblyBigFloat::Small (b) => {a.partial_cmp(&BigFloat::from_f64(*b))}
-                ValuePossiblyBigFloat::Big   (b) => {a.partial_cmp(b)}
+            Self::Big(a) => {match (other) {
+                Self::Small (b) => {a.partial_cmp(&BigFloat::from_f64(*b))}
+                Self::Big   (b) => {a.partial_cmp(b)}
             }}
+        }
+    }
+}
+impl From<&String> for ValuePossiblyBigFloat {
+    fn from(value : &String) -> Self {
+        let res = value.parse::<f64>();
+        return if let Ok(res) = res {
+            Self::Small(res)
+        } else {
+            Self::Big(BigFloat::parse(value).unwrap())
         }
     }
 }

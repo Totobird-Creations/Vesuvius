@@ -1,10 +1,3 @@
-use std::collections::HashMap;
-use std::sync::{
-    Mutex,
-    MutexGuard
-};
-use std::str::FromStr;
-
 use crate::parser::node::*;
 use crate::run::types::*;
 
@@ -15,22 +8,40 @@ use crate::run::types::*;
 
 
 impl Program {
-    pub fn verify(&self) -> Value {
-        
+    pub fn verify(&self) {
+        for decl in &self.decls {
+            decl.verify();
+        }
     }
 }
 
 
 impl Declaration {
-    pub fn verify(&self) -> Value {
-        
+    pub fn verify(&self) {
+        match (&self.decl) {
+            
+            DeclarationType::Function(_, _, _, block) => {
+                block.verify();
+            }
+
+        }
     }
 }
 
 
 impl Statement {
     pub fn verify(&self) -> Value {
-        
+        match (self) {
+
+            Statement::Expression(expr) => {
+                expr.verify()
+            },
+
+            Statement::InitVar(_, _) => {
+                todo!();
+            }
+
+        }
     }
 }
 
@@ -39,15 +50,48 @@ impl Expression {
     pub fn verify(&self) -> Value {
         return match (self) {
 
-            Self::EqualsOperation(left, right) => {
-                let lval = left.verify();
-                let rval = right.verify();
-                if (lval.matches_type(&rval)) {
-                    lval.equals(&rval)
-                } else {
-                    // TODO : PROPER ERROR
-                    panic!("Can not compare two values of different type.")
-                }
+            Self::EqualsOperation(_, _) => {
+                todo!()
+            },
+
+            Self::NotEqualsOperation(_, _) => {
+                todo!()
+            },
+
+            Self::GreaterOperation(_, _) => {
+                todo!()
+            },
+
+            Self::GreaterEqualsOperation(_, _) => {
+                todo!()
+            },
+
+            Self::LessOperation(_, _) => {
+                todo!()
+            },
+
+            Self::LessEqualsOperation(_, _) => {
+                todo!()
+            },
+
+            Self::AdditionOperation(_, _) => {
+                todo!()
+            },
+
+            Self::SubtractionOperation(_, _) => {
+                todo!()
+            },
+
+            Self::MultiplicationOperation(_, _) => {
+                todo!()
+            },
+
+            Self::DivisionOperation(_, _) => {
+                todo!()
+            },
+
+            Self::Atom(atom) => {
+                atom.verify()
             }
 
         }
@@ -63,7 +107,7 @@ impl Atom {
             
             Self::Expression(expr) => expr.verify(),
 
-            Self::If(ifs, els) => {
+            Self::If(_, _) => {
                 todo!();
             }
             
@@ -76,18 +120,28 @@ impl Literal {
     pub fn verify(&self) -> Value {
         return match (self) {
 
-            Self::Int(val) => Value::Int(ValConstr::Ranges(vec![ValConstrRange::Exact(
-                Value::Int(ValuePossiblyBigInt::from(val))
+            Self::Int(val) => Value::Int(ValConstrOrd(vec![ValConstrRange::Exact(
+                ValuePossiblyBigInt::from(val)
             )])),
 
-            Self::Float(int, dec) => Value::Float(ValConstr::Ranges(vec![ValConstrRange::Exact(
-                Value::Float(ValuePossiblyBigFloat::from(&format!("{}.{}", int, dec)))
+            Self::Float(int, dec) => Value::Float(ValConstrOrd(vec![ValConstrRange::Exact(
+                ValuePossiblyBigFloat::from(&format!("{}.{}", int, dec))
             )])),
 
-            Self::Identifier(name) => {
+            Self::Identifier(_) => {
                 todo!();
             }
 
         }
+    }
+}
+
+
+impl Block {
+    pub fn verify(&self) -> Value {
+        for stmt in &self.stmts {
+            stmt.verify();
+        }
+        return Value::Void;
     }
 }
