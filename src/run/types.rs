@@ -108,7 +108,7 @@ impl<T : PartialEq + PartialOrd> ValConstrRange<T> {
 pub enum Value {
     Void,
 
-    FuncType(Box<Vec<(String, Value)>>, Box<Option<Value>>, Block),
+    Function(Box<Vec<(String, Value)>>, Box<Option<Value>>, Block),
 
     Int(ValConstrOrd<ValuePossiblyBigInt>),
     Float(ValConstrOrd<ValuePossiblyBigFloat>),
