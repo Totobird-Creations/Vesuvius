@@ -5,8 +5,9 @@ pub mod run;
 
 
 fn main() {
-    let     program = parser::parse("examples/basic.vsv");
-    let mut scope   = run::verify::Scope::new();
-    program.verify(&mut scope);
+    let program = parser::parse("examples/basic.vsv");
+    run::verify::reset();
+    let scope   = run::verify::Scope::new();
+    let scope   = program.verify(scope);
     println!("{:?}", scope);
 }

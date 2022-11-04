@@ -6,7 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+# Implementation
+static_init  = "1.0"
+# Parsing
 peg          = "0.8"
+# Verification
 num-bigint   = "0.4"
 num-bigfloat = "1.6"
 

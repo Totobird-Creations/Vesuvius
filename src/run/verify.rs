@@ -1,7 +1,17 @@
 use std::collections::HashMap;
 
+use static_init::dynamic;
+
 use crate::parser::node::*;
 use crate::run::types::*;
+use crate::run::notes::{
+    self,
+    CompilationNote
+};
+
+
+#[dynamic]
+pub static mut compilation_notes : Vec<CompilationNote> = Vec::new();
 
 
 #[derive(Debug)]
@@ -10,19 +20,19 @@ pub struct ProgramInfo {
 }
 
 #[derive(Debug)]
-pub enum ScopeParent<'l> {
+pub enum ScopeParent {
     Global(ProgramInfo),
-    Scope(&'l mut Scope<'l>)
+    Scope(Box<Scope>)
 }
 
 #[derive(Debug)]
-pub struct Scope<'l> {
+pub struct Scope {
     name    : String,
-    parent  : ScopeParent<'l>,
+    parent  : ScopeParent,
     symbols : HashMap<String, Symbol>
 }
-impl<'l> Scope<'l> {
-    pub fn new() -> Scope<'l> {
+impl Scope {
+    pub fn new() -> Scope {
         return Scope {
             name    : String::new(),
             parent  : ScopeParent::Global(ProgramInfo {
@@ -37,10 +47,10 @@ impl<'l> Scope<'l> {
             ScopeParent::Scope  (scope)  => scope.get_program_info()
         };
     }
-    pub fn subscope(&mut self, name : Option<&String>) -> Scope {
+    pub fn subscope(self, name : Option<&String>) -> Scope {
         return Scope {
             name    : name.unwrap_or_else(||&self.name).clone(),
-            parent  : ScopeParent::Scope(self),
+            parent  : ScopeParent::Scope(Box::new(self)),
             symbols : HashMap::new()
         }
     }
@@ -58,15 +68,52 @@ impl Symbol {
     }
 }
 
+struct VerifyResponse {
+    scope : Scope,
+    value : Value
+}
+
+
+pub fn reset() {
+    let mut lock = compilation_notes.write();
+    lock.clear();
+}
+macro_rules! push_error {
+    ($typ:ident, $occur:ident, $($text:tt)*) => {{
+        let mut lock = compilation_notes.write();
+        let     note = CompilationNote {
+            occurance : notes::NoteOccurance::$occur,
+            level     : notes::NoteType::Error(notes::ErrorType::$typ),
+            text      : format!($($text)*)
+        };
+        lock.push(note);
+    }}
+}
+use push_error;
+macro_rules! push_warn {
+    ($typ:ident, $occur:ident, $($text:tt)*) => {{
+        let mut lock = compilation_notes.write();
+        let     note = CompilationNote {
+            occurance : notes::NoteOccurance::$occur,
+            level     : notes::NoteType::Warn(notes::WarnType::$typ),
+            text      : format!($($text)*)
+        };
+        println!("{}", note);
+        lock.push(note);
+    }}
+}
+use push_warn;
+
 
 impl Program {
-    pub fn verify(&self, scope : &mut Scope) {
+    pub fn verify(&self, mut scope : Scope) -> Scope {
         for decl in &self.decls {
-            decl.verify_register(scope);
+            v!{decl.verify_register(scope)};
         }
         for decl in &self.decls {
-            decl.verify_contents(scope);
+            v!{decl.verify_contents(scope)};
         }
+        return scope;
     }
 }
 
@@ -74,7 +121,7 @@ impl Program {
 impl Declaration {
 
     // Register that the function exists, so that other objects can reference it.
-    pub fn verify_register(&self, scope : &mut Scope) {
+    fn verify_register(&self, mut scope : Scope) -> VerifyResponse {
         match (&self.decl) {
 
             DeclarationType::Function(name, _, _, block) => {
@@ -84,15 +131,26 @@ impl Declaration {
             }
 
         }
+
+        return VerifyResponse {
+            scope,
+            value : Value::Void
+        }
     }
 
-    pub fn verify_contents(&self, scope : &mut Scope) {
+    // Verify the contents of the declaration.
+    fn verify_contents(&self, mut scope : Scope) -> VerifyResponse {
         match (&self.decl) {
 
             DeclarationType::Function(name, _, _, block) => {
-                block.verify(scope, Some(name));
+                v!{block.verify(scope, Some(name))};
             }
 
+        }
+
+        return VerifyResponse {
+            scope,
+            value : Value::Void
         }
     }
 
@@ -100,7 +158,7 @@ impl Declaration {
 
 
 impl Statement {
-    pub fn verify(&self, scope : &mut Scope) -> Value {
+    fn verify(&self, mut scope : Scope) -> VerifyResponse {
         return match (self) {
 
             Statement::Expression(expr) => {
@@ -108,9 +166,14 @@ impl Statement {
             },
 
             Statement::InitVar(name, value) => {
-                let symbol = Symbol::from(value.verify(scope));
+                v!{let value = value.verify(scope)};
+                let symbol = Symbol::from(value);
                 scope.symbols.insert(name.clone(), symbol);
-                Value::Void
+                
+                return VerifyResponse {
+                    scope,
+                    value : Value::Void
+                }
             }
 
         }
@@ -119,11 +182,15 @@ impl Statement {
 
 
 impl Expression {
-    pub fn verify(&self, scope : &mut Scope) -> Value {
+    fn verify(&self, scope : Scope) -> VerifyResponse {
         return match (self) {
 
             Self::EqualsOperation(_, _) => {
-                todo!()
+                // TODO
+                VerifyResponse {
+                    scope,
+                    value : Value::Bool(ValConstr(vec![true]))
+                }
             },
 
             Self::NotEqualsOperation(_, _) => {
@@ -172,14 +239,38 @@ impl Expression {
 
 
 impl Atom {
-    pub fn verify(&self, scope : &mut Scope) -> Value {
+    fn verify(&self, mut scope : Scope) -> VerifyResponse {
         return match (self) {
 
             Self::Literal(lit) => lit.verify(scope),
             
             Self::Expression(expr) => expr.verify(scope),
 
-            Self::If(_, _) => {
+            Self::If(ifs, els) => {
+                for (condition, block) in ifs {
+                    v!{let condition = condition.verify(scope)};
+                    if let Value::Bool(condition) = condition {
+                        match (condition.test(&true)) {
+                            TestResponse::Always => {
+                                push_warn!(BlockContents_Called, Always, "Condition always succeeds. Consider removing if condition?");
+                                v!{let retn = block.verify(scope, None)};
+                                return VerifyResponse {
+                                    scope : scope,
+                                    value : retn
+                                };
+                            },
+                            TestResponse::Never => {
+                                push_warn!(BlockContents_Called, Never, "Condition always fails. Consider removing case?");
+                            },
+                            TestResponse::Sometimes => {
+                                
+                            }
+                        }
+                    } else {
+                        // TODO : PROPER ERROR
+                        panic!("condition is not boolean");
+                    }
+                }
                 todo!();
             }
             
@@ -189,19 +280,25 @@ impl Atom {
 
 
 impl Literal {
-    pub fn verify(&self, _scope : &mut Scope) -> Value {
+    fn verify(&self, scope : Scope) -> VerifyResponse {
         return match (self) {
 
-            Self::Int(val) => Value::Int(ValConstrOrd(vec![ValConstrRange::Exact(
-                ValuePossiblyBigInt::from(val)
-            )])),
+            Self::Int(val) => VerifyResponse {
+                scope,
+                value : Value::Int(ValConstrOrd(vec![ValConstrRange::Exact(
+                    ValuePossiblyBigInt::from(val)
+                )]))
+            },
 
-            Self::Float(int, dec) => Value::Float(ValConstrOrd(vec![ValConstrRange::Exact(
-                ValuePossiblyBigFloat::from(&format!("{}.{}", int, dec))
-            )])),
+            Self::Float(int, dec) => VerifyResponse {
+                scope,
+                value : Value::Float(ValConstrOrd(vec![ValConstrRange::Exact(
+                    ValuePossiblyBigFloat::from(&format!("{}.{}", int, dec))
+                )]))
+            },
 
-            Self::Identifier(_) => {
-                todo!();
+            Self::Identifier(name) => {
+                todo!()
             }
 
         }
@@ -210,11 +307,43 @@ impl Literal {
 
 
 impl Block {
-    pub fn verify(&self, scope : &mut Scope, name : Option<&String>) -> Value {
+    fn verify(&self, scope : Scope, name : Option<&String>) -> VerifyResponse {
         let mut scope = scope.subscope(name);
+        let mut ret   = Value::Void;
         for stmt in &self.stmts {
-            stmt.verify(&mut scope);
+            v!{ret = stmt.verify(scope)};
         }
-        return Value::Void;
+        return VerifyResponse {
+            scope,
+            value : if (self.retlast) {ret} else {Value::Void}
+        };
     }
 }
+
+
+
+macro_rules! v {
+    {let $value:ident = $obj:ident . $func:ident ($scope:ident $(, $arg:expr)*)} => {
+        let VerifyResponse {
+            scope : a,
+            value : $value
+        } = $obj.$func($scope $(, $arg)*);
+        $scope = a;
+    };
+    {$value:ident = $obj:ident . $func:ident ($scope:ident $(, $arg:expr)*)} => {
+        let VerifyResponse {
+            scope : a,
+            value : b
+        } = $obj.$func($scope $(, $arg)*);
+        $scope = a;
+        $value = b;
+    };
+    {$obj:ident . $func:ident ($scope:ident $(, $arg:expr)*)} => {
+        let VerifyResponse {
+            scope : a,
+            value : _
+        } = $obj.$func($scope $(, $arg)*);
+        $scope = a;
+    };
+}
+use v;

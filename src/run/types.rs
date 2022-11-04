@@ -10,9 +10,25 @@ use num_bigfloat::BigFloat;
 use crate::parser::node::*;
 
 
+pub enum TestResponse {
+    Always,    // Value matches every value of the constraint.
+    Sometimes, // Value matches some values of the constraint.
+    Never      // Value does not match any value of the constraint.
+}
+
 #[derive(Debug, Clone)]
 pub struct ValConstr<T : PartialEq>(pub Vec<T>);
 impl<T : PartialEq> ValConstr<T> {
+    pub fn test(&self, value : &T) -> TestResponse {
+        let t = self.0.contains(value);
+        let f = self.0.iter().any(|v| v != value);
+        return match ((t, f)) {
+            (true, false) => TestResponse::Always,
+            (false, true) => TestResponse::Never,
+            (true, true)  => TestResponse::Sometimes,
+            _ => panic!("INTERNAL ERROR")
+        };
+    }
     pub fn equals(&self, other : &ValConstr<T>) -> Value {
         let mut t = false;
         let mut f = false;
