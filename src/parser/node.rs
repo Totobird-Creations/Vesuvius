@@ -1,28 +1,33 @@
 use std::collections::HashMap;
 
+use serde::{
+    Serialize,
+    Deserialize
+};
 
-#[derive(Debug)]
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Program {
     pub decls : Vec<Declaration>
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Declaration {
     pub headers : Vec<DeclarationHeader>,
     pub vis     : DeclarationVisibility,
     pub decl    : DeclarationType
 }
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum DeclarationHeader {
     Entry
 }
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
 pub enum DeclarationVisibility {
     Public,
     Private
 }
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum DeclarationType {
     Function(
         String,                        // Name
@@ -33,7 +38,7 @@ pub enum DeclarationType {
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Statement {
     InitVar(
         String,    // Name
@@ -42,7 +47,7 @@ pub enum Statement {
     Expression(Expression)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Expression {
 
     EqualsOperation(Box<Expression>, Box<Expression>),
@@ -60,7 +65,7 @@ pub enum Expression {
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Atom {
     Literal(Literal),
     Expression(Box<Expression>),
@@ -73,7 +78,7 @@ pub enum Atom {
     )
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Literal {
     Int(String),
     Float(
@@ -84,19 +89,20 @@ pub enum Literal {
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum TypeDescriptorParts {
     BuiltIn(String),
     Custom(Vec<String>)
 }
-#[derive(Debug, Clone)]
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TypeDescriptor {
     pub parts  : TypeDescriptorParts,
     pub constr : HashMap<String, Literal>
 }
 
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Block {
     pub stmts   : Vec<Statement>,
     pub retlast : bool            // Return the value of the last statement

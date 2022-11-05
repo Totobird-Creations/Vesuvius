@@ -13,13 +13,21 @@ use crate::parser::node::*;
 pub enum TestResponse {
     Always,    // Value matches every value of the constraint.
     Sometimes, // Value matches some values of the constraint.
-    Never      // Value does not match any value of the constraint.
+    Never,     // Value does not match any value of the constraint.
+    Failed     // A previous operation failed, so this test could not be performed.
 }
 
 #[derive(Debug, Clone)]
 pub struct ValConstr<T : PartialEq>(pub Vec<T>);
 impl<T : PartialEq> ValConstr<T> {
+    pub fn failed() -> ValConstr<T> {
+        return ValConstr(Vec::new());
+    }
+
     pub fn test(&self, value : &T) -> TestResponse {
+        if (self.0.len() <= 0) {
+            return TestResponse::Failed;
+        }
         let t = self.0.contains(value);
         let f = self.0.iter().any(|v| v != value);
         return match ((t, f)) {
@@ -29,7 +37,11 @@ impl<T : PartialEq> ValConstr<T> {
             _ => panic!("INTERNAL ERROR")
         };
     }
+
     pub fn equals(&self, other : &ValConstr<T>) -> Value {
+        if (self.0.len() <= 0) {
+            return Value::Bool(ValConstr::failed());
+        }
         let mut t = false;
         let mut f = false;
         for sval in &self.0 {
@@ -45,6 +57,7 @@ impl<T : PartialEq> ValConstr<T> {
         if (f) {v.push(false);}
         return Value::Bool(ValConstr(v));
     }
+
 }
 
 #[derive(Debug, Clone)]

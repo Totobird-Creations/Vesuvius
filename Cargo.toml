@@ -10,6 +10,10 @@ edition = "2021"
 static_init  = "1.0"
 # Parsing
 peg          = "0.8"
+# Info
+convert-base = "1.1"
+serde        = "1.0"
+ciborium     = "0.2"
 # Verification
 num-bigint   = "0.4"
 num-bigfloat = "1.6"

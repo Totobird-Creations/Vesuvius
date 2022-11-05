@@ -1,119 +1,22 @@
 use std::collections::HashMap;
 
-use static_init::dynamic;
-
 use crate::parser::node::*;
 use crate::run::types::*;
 use crate::run::notes::{
-    self,
-    CompilationNote
+    push_warn,
+    push_error
 };
-
-
-#[dynamic]
-pub static mut compilation_notes : Vec<CompilationNote> = Vec::new();
-
-
-#[derive(Debug)]
-pub struct ProgramInfo {
-    entry : Option<Vec<String>>,
-}
-
-#[derive(Debug)]
-pub enum ScopeParent {
-    Global(ProgramInfo),
-    Scope(Box<Scope>)
-}
-
-#[derive(Debug)]
-pub struct Scope {
-    name    : String,
-    parent  : ScopeParent,
-    symbols : HashMap<String, Symbol>
-}
-impl Scope {
-    pub fn new() -> Scope {
-        return Scope {
-            name    : String::new(),
-            parent  : ScopeParent::Global(ProgramInfo {
-                entry : None
-            }),
-            symbols : HashMap::new()
-        }
-    }
-    pub fn get_program_info(&mut self) -> &mut ProgramInfo {
-        return match (&mut self.parent) {
-            ScopeParent::Global (global) => global,
-            ScopeParent::Scope  (scope)  => scope.get_program_info()
-        };
-    }
-    pub fn subscope(self, name : Option<&String>) -> Scope {
-        return Scope {
-            name    : name.unwrap_or_else(||&self.name).clone(),
-            parent  : ScopeParent::Scope(Box::new(self)),
-            symbols : HashMap::new()
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct Symbol {
-    value : Value
-}
-impl Symbol {
-    pub fn from(value : Value) -> Symbol {
-        return Symbol {
-            value
-        };
-    }
-}
-
-struct VerifyResponse {
-    scope : Scope,
-    value : Value
-}
-
-
-pub fn reset() {
-    let mut lock = compilation_notes.write();
-    lock.clear();
-}
-macro_rules! push_error {
-    ($typ:ident, $occur:ident, $($text:tt)*) => {{
-        let mut lock = compilation_notes.write();
-        let     note = CompilationNote {
-            occurance : notes::NoteOccurance::$occur,
-            level     : notes::NoteType::Error(notes::ErrorType::$typ),
-            text      : format!($($text)*)
-        };
-        lock.push(note);
-    }}
-}
-use push_error;
-macro_rules! push_warn {
-    ($typ:ident, $occur:ident, $($text:tt)*) => {{
-        let mut lock = compilation_notes.write();
-        let     note = CompilationNote {
-            occurance : notes::NoteOccurance::$occur,
-            level     : notes::NoteType::Warn(notes::WarnType::$typ),
-            text      : format!($($text)*)
-        };
-        println!("{}", note);
-        lock.push(note);
-    }}
-}
-use push_warn;
+use crate::run::scope::*;
 
 
 impl Program {
-    pub fn verify(&self, mut scope : Scope) -> Scope {
+    pub fn verify(&self) {
         for decl in &self.decls {
-            v!{decl.verify_register(scope)};
+            decl.verify_register();
         }
         for decl in &self.decls {
-            v!{decl.verify_contents(scope)};
+            decl.verify_contents();
         }
-        return scope;
     }
 }
 
@@ -121,36 +24,26 @@ impl Program {
 impl Declaration {
 
     // Register that the function exists, so that other objects can reference it.
-    fn verify_register(&self, mut scope : Scope) -> VerifyResponse {
+    fn verify_register(&self) {
         match (&self.decl) {
 
             DeclarationType::Function(name, _, _, block) => {
-                scope.symbols.insert(name.clone(), Symbol::from(Value::Function(
+                Scope::add_symbol(name, Symbol::from(Value::Function(
                     Box::new(Vec::new()), Box::new(None), block.clone()
                 )));
             }
 
         }
-
-        return VerifyResponse {
-            scope,
-            value : Value::Void
-        }
     }
 
     // Verify the contents of the declaration.
-    fn verify_contents(&self, mut scope : Scope) -> VerifyResponse {
+    fn verify_contents(&self) {
         match (&self.decl) {
 
             DeclarationType::Function(name, _, _, block) => {
-                v!{block.verify(scope, Some(name))};
+                block.verify(Some(name));
             }
 
-        }
-
-        return VerifyResponse {
-            scope,
-            value : Value::Void
         }
     }
 
@@ -158,22 +51,17 @@ impl Declaration {
 
 
 impl Statement {
-    fn verify(&self, mut scope : Scope) -> VerifyResponse {
+    fn verify(&self) -> Value {
         return match (self) {
 
             Statement::Expression(expr) => {
-                expr.verify(scope)
+                expr.verify()
             },
 
             Statement::InitVar(name, value) => {
-                v!{let value = value.verify(scope)};
-                let symbol = Symbol::from(value);
-                scope.symbols.insert(name.clone(), symbol);
+                Scope::add_symbol(name, Symbol::from(value.verify()));
                 
-                return VerifyResponse {
-                    scope,
-                    value : Value::Void
-                }
+                return Value::Void;
             }
 
         }
@@ -182,14 +70,16 @@ impl Statement {
 
 
 impl Expression {
-    fn verify(&self, scope : Scope) -> VerifyResponse {
+    fn verify(&self) -> Value {
         return match (self) {
 
-            Self::EqualsOperation(_, _) => {
-                // TODO
-                VerifyResponse {
-                    scope,
-                    value : Value::Bool(ValConstr(vec![true]))
+            Self::EqualsOperation(left, right) => {
+                let left  = left  .verify();
+                let right = right .verify();
+                if (left.matches_type(&right)) {
+                        left.equals(&right)
+                } else {
+                    Value::Bool(ValConstr::failed())
                 }
             },
 
@@ -229,9 +119,7 @@ impl Expression {
                 todo!()
             },
 
-            Self::Atom(atom) => {
-                atom.verify(scope)
-            }
+            Self::Atom(atom) => atom.verify()
 
         }
     }
@@ -239,39 +127,40 @@ impl Expression {
 
 
 impl Atom {
-    fn verify(&self, mut scope : Scope) -> VerifyResponse {
+    fn verify(&self) -> Value {
         return match (self) {
 
-            Self::Literal(lit) => lit.verify(scope),
+            Self::Literal(lit) => lit.verify(),
             
-            Self::Expression(expr) => expr.verify(scope),
+            Self::Expression(expr) => expr.verify(),
 
             Self::If(ifs, els) => {
                 for (condition, block) in ifs {
-                    v!{let condition = condition.verify(scope)};
+                    // TODO : Check for different return types.
+                    let condition = condition.verify();
                     if let Value::Bool(condition) = condition {
                         match (condition.test(&true)) {
                             TestResponse::Always => {
                                 push_warn!(BlockContents_Called, Always, "Condition always succeeds. Consider removing if condition?");
-                                v!{let retn = block.verify(scope, None)};
-                                return VerifyResponse {
-                                    scope : scope,
-                                    value : retn
-                                };
+                                return block.verify(None);
                             },
                             TestResponse::Never => {
                                 push_warn!(BlockContents_Called, Never, "Condition always fails. Consider removing case?");
                             },
                             TestResponse::Sometimes => {
-                                
-                            }
+                                let retn = block.verify(None);
+                            },
+                            TestResponse::Failed => {}
                         }
                     } else {
                         // TODO : PROPER ERROR
                         panic!("condition is not boolean");
                     }
                 }
-                todo!();
+                if let Some(els) = els {
+                    return els.verify(None);
+                }
+                return Value::Void;
             }
             
         }
@@ -280,26 +169,18 @@ impl Atom {
 
 
 impl Literal {
-    fn verify(&self, scope : Scope) -> VerifyResponse {
+    fn verify(&self) -> Value {
         return match (self) {
 
-            Self::Int(val) => VerifyResponse {
-                scope,
-                value : Value::Int(ValConstrOrd(vec![ValConstrRange::Exact(
-                    ValuePossiblyBigInt::from(val)
-                )]))
-            },
+            Self::Int(val) => Value::Int(ValConstrOrd(vec![ValConstrRange::Exact(
+                ValuePossiblyBigInt::from(val)
+            )])),
 
-            Self::Float(int, dec) => VerifyResponse {
-                scope,
-                value : Value::Float(ValConstrOrd(vec![ValConstrRange::Exact(
-                    ValuePossiblyBigFloat::from(&format!("{}.{}", int, dec))
-                )]))
-            },
+            Self::Float(int, dec) => Value::Float(ValConstrOrd(vec![ValConstrRange::Exact(
+                ValuePossiblyBigFloat::from(&format!("{}.{}", int, dec))
+            )])),
 
-            Self::Identifier(name) => {
-                todo!()
-            }
+            Self::Identifier(name) => Scope::get_symbol(name).value.clone()
 
         }
     }
@@ -307,43 +188,13 @@ impl Literal {
 
 
 impl Block {
-    fn verify(&self, scope : Scope, name : Option<&String>) -> VerifyResponse {
-        let mut scope = scope.subscope(name);
+    fn verify(&self, name : Option<&String>) -> Value {
+        Scope::enter_subscope(name);
         let mut ret   = Value::Void;
         for stmt in &self.stmts {
-            v!{ret = stmt.verify(scope)};
+            ret = stmt.verify();
         }
-        return VerifyResponse {
-            scope,
-            value : if (self.retlast) {ret} else {Value::Void}
-        };
+        Scope::exit_subscope();
+        return if (self.retlast) {ret} else {Value::Void};
     }
 }
-
-
-
-macro_rules! v {
-    {let $value:ident = $obj:ident . $func:ident ($scope:ident $(, $arg:expr)*)} => {
-        let VerifyResponse {
-            scope : a,
-            value : $value
-        } = $obj.$func($scope $(, $arg)*);
-        $scope = a;
-    };
-    {$value:ident = $obj:ident . $func:ident ($scope:ident $(, $arg:expr)*)} => {
-        let VerifyResponse {
-            scope : a,
-            value : b
-        } = $obj.$func($scope $(, $arg)*);
-        $scope = a;
-        $value = b;
-    };
-    {$obj:ident . $func:ident ($scope:ident $(, $arg:expr)*)} => {
-        let VerifyResponse {
-            scope : a,
-            value : _
-        } = $obj.$func($scope $(, $arg)*);
-        $scope = a;
-    };
-}
-use v;

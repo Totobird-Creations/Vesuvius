@@ -8,12 +8,13 @@ pub mod node;
     mod node_fmt;
 
 
-pub fn parse<S : Into<String>>(file : S) -> node::Program {
-    let file = file.into();
-    let text = fs::read_to_string(file).unwrap();
-    match (grammer::parse(text)) {
-        Ok(v)  => {
-            println!("{}", v);
+pub fn read<S : Into<String>>(file : S) -> String {
+    return fs::read_to_string(file.into()).unwrap();
+}
+
+pub fn parse<S : Into<String>>(text : S) -> node::Program {
+    match (grammer::parse(text.into())) {
+        Ok(v) => {
             return v;
         },
         Err(e) => {
