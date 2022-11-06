@@ -1,19 +1,31 @@
+use std::cmp::max;
+
 use static_init::dynamic;
+
+use crate::parse::node::Range;
+
+
+const DETAILS_SNIPPET_CUTOFF : usize = 1;
 
 
 #[dynamic]
 pub(crate) static mut COMPILATION_NOTES : Vec<CompilationNote> = Vec::new();
 
 
-pub fn dump() {
+pub fn dump<'l, S : Into<&'l String>>(script : S) {
     let lock = COMPILATION_NOTES.read();
     let mut counts = (
         0, // Warn
         0  // Error
     );
+    let mut line_len = 0;
+    let     script   = script.into();
     for note in lock.iter() {
-        println!("{}", note.fmt(&mut counts));
+        let res  = note.fmt(script, &mut counts);
+        println!("\x1b[90m{}\x1b[0m\n{}", "─".repeat(max(res.1, line_len)), res.0);
+        line_len = res.1;
     }
+    println!("\x1b[90m{}\x1b[0m", "─".repeat(line_len));
     {
         let (warns, errors) = counts;
         let mut finished = if (errors > 0) {
@@ -39,33 +51,37 @@ pub fn dump() {
             }
         }
         finished += ".";
-        println!("{}", finished);
+        println!("\n{}", finished);
     }
 }
 
 
+#[allow(unused)]
 macro_rules! push_error {
-    ($typ:ident, $occur:ident, $($text:tt)*) => {{
+    ($typ:ident, $occur:ident) => {$crate::run::notes::push_error!($typ, $occur, {})};
+    ($typ:ident, $occur:ident, {$($range:expr => {$($text:tt)+}),*}) => {{
         use $crate::run::notes::*;
         let mut lock = COMPILATION_NOTES.write();
         let     note = CompilationNote {
             occurance : NoteOccurance::$occur,
             level     : NoteType::Error(ErrorType::$typ),
-            text      : format!($($text)*)
+            details   : vec![$(($range, format!($($text)+))),*]
         };
         lock.push(note);
     }}
 }
 pub(crate) use push_error;
 
+#[allow(unused)]
 macro_rules! push_warn {
-    ($typ:ident, $occur:ident, $($text:tt)*) => {{
+    ($typ:ident, $occur:ident) => {$crate::run::notes::push_warn!($typ, $occur, {})};
+    ($typ:ident, $occur:ident, {$($range:expr => {$($text:tt)+}),*}) => {{
         use $crate::run::notes::*;
         let mut lock = COMPILATION_NOTES.write();
         let     note = CompilationNote {
             occurance : NoteOccurance::$occur,
             level     : NoteType::Warn(WarnType::$typ),
-            text      : format!($($text)*)
+            details   : vec![$(($range, format!($($text)+))),*]
         };
         lock.push(note);
     }}
@@ -76,11 +92,12 @@ pub(crate) use push_warn;
 pub struct CompilationNote {
     pub occurance : NoteOccurance,
     pub level     : NoteType,
-    pub text      : String
+    pub details   : Vec<(Range, String)>
 }
 impl CompilationNote {
-    fn fmt(&self, counts : &mut (u64, u64)) -> String {
-        return format!("{}", self.level.fmt(&self.occurance, counts));
+    fn fmt(&self, script : &String, counts : &mut (u64, u64)) -> (String, usize) {
+        let text = self.level.fmt(script, &self.occurance, &self.details, counts);
+        return (format!("{}", text.0), text.1);
     }
 }
 
@@ -101,20 +118,84 @@ impl NoteType {
             Self::Error (_) => "ERROR"
         }
     }
-    fn fmt(&self, occurance : &NoteOccurance, (warns, errors) : &mut (u64, u64)) -> String {
-        return format!("{}[{}]\x1b[0m: {}\x1b[1m{}\x1b[0m.",
-            self.cl(), self.pf(), self.cl(),
-            match (self) {
-                Self::Warn(warn) => {
-                    *warns += 1;
-                    warn.fmt(occurance)
-                },
-                Self::Error(error) => {
-                    *errors += 1;
-                    error.fmt(occurance)
-                }
+    fn fmt(&self, script : &String, occurance : &NoteOccurance, details : &Vec<(Range, String)>, (warns, errors) : &mut (u64, u64)) -> (String, usize) {
+        let title = match (self) {
+            Self::Warn(warn) => {
+                *warns += 1;
+                warn.fmt(occurance)
+            },
+            Self::Error(error) => {
+                *errors += 1;
+                error.fmt(occurance)
+            }
+        };
+        let title_unformat = format!("[{}]: {}.",
+            self.pf(),
+            title
+        );
+        let title = format!("{}[{}]\x1b[0m: {}\x1b[1m{}\x1b[0m.",
+            self.cl(),
+            self.pf(),
+            self.cl(),
+            title
+        );
+        let text = format!("{}{}",
+            title,
+            if (details.len() > 0) {
+                details.iter().map(|detail| {
+                    let     range      = detail.0.to_linecolumn(script);
+                    let mut lines      = Vec::new();
+                    let mut lines_pad  = 0;
+                    for l in (range.0.0 - 1)..range.1.0 {
+                        let line     = script.lines().nth(l).unwrap();
+                        let line_pad = l.to_string().len();
+                        if (line_pad > lines_pad) {
+                            lines_pad = line_pad;
+                        }
+                        lines.push((l, line));
+                    }
+                    while (lines.len() > 4) {
+                        lines.remove(2);
+                    }
+                    format!("{}{}{}{}\n{}",
+                        format!("\n  \x1b[90m┌\x1b[0m `\x1b[94m{}\x1b[0m` \x1b[94m\x1b[1m{}\x1b[0m\x1b[34m:\x1b[94m\x1b[1m{}\x1b[0m\x1b[34m..\x1b[0m\x1b[94m\x1b[1m{}\x1b[0m\x1b[34m:\x1b[0m\x1b[94m\x1b[1m{}\x1b[0m",
+                            "todo_filename.vsv",
+                            range.0.0,
+                            range.0.1,
+                            range.1.0,
+                            range.1.1
+                        ),
+                        if (lines.len() > 1) {
+                            format!("\n  \x1b[90m│ {} │\x1b[0m\x1b[95m{}┌{}\x1b[0m",
+                                " ".repeat(lines_pad),
+                                " ".repeat(range.0.1),
+                                "─".repeat(lines[0].1.len() - range.0.1)
+                            )
+                        } else {String::new()},
+                        lines.iter().map(|(l, line)| {
+                            format!("\n  \x1b[90m│\x1b[0m \x1b[94m\x1b[2m{: >lines_pad$}\x1b[0m \x1b[90m│\x1b[0m {}", l, line)
+                        }).collect::<Vec<_>>().join(""),
+                        format!("\n  \x1b[90m│ {} │\x1b[0m\x1b[95m{}\x1b[0m",
+                            " ".repeat(lines_pad),
+                            if (lines.len() <= 1) {
+                                format!("{}{}",
+                                    " ".repeat(range.0.1),
+                                    if (range.1.1 - range.0.1 <= 1) {
+                                        String::from("╵")
+                                    } else if (range.0.1 != range.1.1) {
+                                        format!("└{}┘", "─".repeat(range.1.1 - range.0.1 - 2))
+                                    } else {String::new()}
+                                )
+                            } else {format!("{}┘", "─".repeat(range.1.1 - 1))}
+                        ),
+                        format!("  \x1b[90m└\x1b[0m {}{}\x1b[0m", self.cl(), detail.1)
+                    )
+                }).collect::<Vec<_>>().join("")
+            } else {
+                String::from("\n  \x1b[90m\x1b[3mNo other details provided.\x1b[0m")
             }
         );
+        return (text, title_unformat.len());
     }
 }
 
@@ -125,12 +206,13 @@ enum_named!{NoteOccurance {
 }}
 
 enum_named!{WarnType {
-    UnstableReleaseUsed,
+    UnstableRelease,
     BlockContents_Called
 }}
 
 enum_named!{ErrorType {
-    DivisionByZero_
+    DuplicateEntry,
+    InvalidTypeReceived
 }}
 
 

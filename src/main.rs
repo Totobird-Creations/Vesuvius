@@ -1,19 +1,16 @@
 #![allow(unused_parens)]
 
 
-pub mod parser;
+pub mod parse;
 pub mod run;
 
 
-fn from_file<S : Into<String>>(name : S) -> parser::node::Program {
-    return parser::parse(parser::read(name.into()));
-}
-
-
 fn main() {
-    let program = parser::parse(parser::read("examples/basic.vsv"));
+    let fname   = "examples/basic.vsv";
+    println!("\n\x1b[36mCompiling\x1b[0m `\x1b[36m\x1b[1m{}\x1b[0m`.\n", fname);
+    let script  = parse::read(fname);
+    let program = parse::parse(&script);
     run::reset();
     program.verify();
-    run::notes::dump();
-    println!("{:?}", unsafe{&run::scope::SCOPE}[0]);
+    run::notes::dump(&script);
 }

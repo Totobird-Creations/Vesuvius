@@ -1,12 +1,13 @@
-use std::collections::HashMap;
-
-use crate::parser::node::*;
+use crate::parse::node::*;
 use crate::run::types::*;
 use crate::run::notes::{
-    push_warn,
-    push_error
+    push_error,
+    push_warn
 };
-use crate::run::scope::*;
+use crate::run::scope::{
+    self,
+    *
+};
 
 
 impl Program {
@@ -31,6 +32,21 @@ impl Declaration {
                 Scope::add_symbol(name, Symbol::from(Value::Function(
                     Box::new(Vec::new()), Box::new(None), block.clone()
                 )));
+                for header in &self.headers {
+                    match (&header.header) {
+                        DeclarationHeaderType::Entry => {
+                            let mut lock = scope::PROGRAM_INFO.write();
+                            if let Some((range, _)) = lock.entry {
+                                push_error!(DuplicateEntry, Always, {
+                                    range        => {"#[entry] already defined here."},
+                                    header.range => {"#[entry] used again here."}
+                                });
+                            } else {
+                                lock.entry = Some((header.range, Scope::module_with_sub(name)));
+                            }
+                        }
+                    }
+                }
             }
 
         }
@@ -52,14 +68,14 @@ impl Declaration {
 
 impl Statement {
     fn verify(&self) -> Value {
-        return match (self) {
+        return match (&self.stmt) {
 
-            Statement::Expression(expr) => {
+            StatementType::Expression(expr) => {
                 expr.verify()
             },
 
-            Statement::InitVar(name, value) => {
-                Scope::add_symbol(name, Symbol::from(value.verify()));
+            StatementType::InitVar(name, value) => {
+                Scope::add_symbol(&name, Symbol::from(value.verify()));
                 
                 return Value::Void;
             }
@@ -71,55 +87,59 @@ impl Statement {
 
 impl Expression {
     fn verify(&self) -> Value {
-        return match (self) {
+        return match (&self.expr) {
 
-            Self::EqualsOperation(left, right) => {
-                let left  = left  .verify();
-                let right = right .verify();
-                if (left.matches_type(&right)) {
-                        left.equals(&right)
+            ExpressionType::EqualsOperation(left, right) => {
+                let left_val  = left  .verify();
+                let right_val = right .verify();
+                if (left_val.matches_type(&right_val)) {
+                        left_val.equals(&right_val)
                 } else {
+                    push_error!(InvalidTypeReceived, Always, {
+                        left.range  => {"Does not match type of right side."},
+                        right.range => {"Does not match type of left side."}
+                    });
                     Value::Bool(ValConstr::failed())
                 }
             },
 
-            Self::NotEqualsOperation(_, _) => {
+            ExpressionType::NotEqualsOperation(_, _) => {
                 todo!()
             },
 
-            Self::GreaterOperation(_, _) => {
+            ExpressionType::GreaterOperation(_, _) => {
                 todo!()
             },
 
-            Self::GreaterEqualsOperation(_, _) => {
+            ExpressionType::GreaterEqualsOperation(_, _) => {
                 todo!()
             },
 
-            Self::LessOperation(_, _) => {
+            ExpressionType::LessOperation(_, _) => {
                 todo!()
             },
 
-            Self::LessEqualsOperation(_, _) => {
+            ExpressionType::LessEqualsOperation(_, _) => {
                 todo!()
             },
 
-            Self::AdditionOperation(_, _) => {
+            ExpressionType::AdditionOperation(_, _) => {
                 todo!()
             },
 
-            Self::SubtractionOperation(_, _) => {
+            ExpressionType::SubtractionOperation(_, _) => {
                 todo!()
             },
 
-            Self::MultiplicationOperation(_, _) => {
+            ExpressionType::MultiplicationOperation(_, _) => {
                 todo!()
             },
 
-            Self::DivisionOperation(_, _) => {
+            ExpressionType::DivisionOperation(_, _) => {
                 todo!()
             },
 
-            Self::Atom(atom) => atom.verify()
+            ExpressionType::Atom(atom) => atom.verify()
 
         }
     }
@@ -128,33 +148,47 @@ impl Expression {
 
 impl Atom {
     fn verify(&self) -> Value {
-        return match (self) {
+        return match (&self.atom) {
 
-            Self::Literal(lit) => lit.verify(),
+            AtomType::Literal(lit) => lit.verify(),
             
-            Self::Expression(expr) => expr.verify(),
+            AtomType::Expression(expr) => expr.verify(),
 
-            Self::If(ifs, els) => {
-                for (condition, block) in ifs {
+            AtomType::If(ifs, els) => {
+                for i in 0..ifs.len() {
+                    let (condition, block) = &ifs[i];
                     // TODO : Check for different return types.
-                    let condition = condition.verify();
-                    if let Value::Bool(condition) = condition {
-                        match (condition.test(&true)) {
+                    let cond_val = condition.verify();
+                    if let Value::Bool(cond_val) = cond_val {
+                        match (cond_val.test(&true)) {
                             TestResponse::Always => {
-                                push_warn!(BlockContents_Called, Always, "Condition always succeeds. Consider removing if condition?");
+                                push_warn!(BlockContents_Called, Always, {
+                                    condition.range => {"Condition always succeeds."},
+                                    block.range     => {"Consider {}?", if (i == 0) {"removing if statement"} else {"replacing this case with else"}}
+                                });
+                                /*push_warn!(BlockContents_Called, Always, "{}", if (i == 0) {
+                                    "Condition always succeeds. Consider removing if statement?"
+                                } else {
+                                    "Condition always succeeds. Consider replacing this case with else?"
+                                });*/
                                 return block.verify(None);
                             },
                             TestResponse::Never => {
-                                push_warn!(BlockContents_Called, Never, "Condition always fails. Consider removing case?");
+                                push_warn!(BlockContents_Called, Never, {
+                                    condition.range => {"Condition always fails."},
+                                    block.range     => {"Consider removing case?"}
+                                });
                             },
                             TestResponse::Sometimes => {
-                                let retn = block.verify(None);
+                                block.verify(None);
                             },
                             TestResponse::Failed => {}
                         }
                     } else {
-                        // TODO : PROPER ERROR
-                        panic!("condition is not boolean");
+                        push_error!(InvalidTypeReceived, Always, {
+                            condition.range => {"Must be of type `bool`"}
+                        });
+                        return Value::Void;
                     }
                 }
                 if let Some(els) = els {

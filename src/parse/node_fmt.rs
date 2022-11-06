@@ -5,7 +5,7 @@ use std::fmt::{
     Debug
 };
 
-use crate::parser::node::*;
+use crate::parse::node::*;
 
 
 
@@ -63,8 +63,8 @@ impl Declaration {
 
 impl DeclarationHeader {
     pub fn format(&self, _indent : usize) -> String {
-        return c!(HEADER, format!("#[{}]", match (self) {
-            Self::Entry => "entry"
+        return c!(HEADER, format!("#[{}]", match (self.header) {
+            DeclarationHeaderType::Entry => "entry"
         }));
     }
 }
@@ -72,9 +72,9 @@ impl DeclarationHeader {
 
 impl DeclarationVisibility {
     pub fn format(&self, _indent : usize) -> String {
-        return c!(KEYWORD, match (self) {
-            Self::Public  => "pub",
-            Self::Private => "priv"
+        return c!(KEYWORD, match (self.vis) {
+            DeclarationVisibilityType::Public  => "pub",
+            DeclarationVisibilityType::Private => "priv"
         });
     }
 }
@@ -99,9 +99,9 @@ impl DeclarationType {
 
 impl Statement {
     fn format(&self, indent : usize) -> String {
-        return match (self) {
+        return match (&self.stmt) {
 
-            Self::InitVar(name, value) => {
+            StatementType::InitVar(name, value) => {
                 format!("{} {} = {}",
                     c!(KEYWORD, "let"),
                     c!(NAME, name),
@@ -109,7 +109,7 @@ impl Statement {
                 )
             },
 
-            Self::Expression(expr) => expr.format(indent)
+            StatementType::Expression(expr) => expr.format(indent)
 
         }
     }
@@ -118,20 +118,20 @@ impl Statement {
 
 impl Expression {
     fn format(&self, indent : usize) -> String {
-        return match (self) {
+        return match (&self.expr) {
 
-            Self::EqualsOperation         (left, right) => format!("({} == {})", left.format(indent), right.format(indent)),
-            Self::NotEqualsOperation      (left, right) => format!("({} != {})", left.format(indent), right.format(indent)),
-            Self::GreaterOperation        (left, right) => format!("({} > {})", left.format(indent), right.format(indent)),
-            Self::GreaterEqualsOperation  (left, right) => format!("({} >= {})", left.format(indent), right.format(indent)),
-            Self::LessOperation           (left, right) => format!("({} < {})", left.format(indent), right.format(indent)),
-            Self::LessEqualsOperation     (left, right) => format!("({} <= {})", left.format(indent), right.format(indent)),
-            Self::AdditionOperation       (left, right) => format!("({} + {})", left.format(indent), right.format(indent)),
-            Self::SubtractionOperation    (left, right) => format!("({} - {})", left.format(indent), right.format(indent)),
-            Self::MultiplicationOperation (left, right) => format!("({} * {})", left.format(indent), right.format(indent)),
-            Self::DivisionOperation       (left, right) => format!("({} / {})", left.format(indent), right.format(indent)),
+            ExpressionType::EqualsOperation         (left, right) => format!("({} == {})", left.format(indent), right.format(indent)),
+            ExpressionType::NotEqualsOperation      (left, right) => format!("({} != {})", left.format(indent), right.format(indent)),
+            ExpressionType::GreaterOperation        (left, right) => format!("({} > {})", left.format(indent), right.format(indent)),
+            ExpressionType::GreaterEqualsOperation  (left, right) => format!("({} >= {})", left.format(indent), right.format(indent)),
+            ExpressionType::LessOperation           (left, right) => format!("({} < {})", left.format(indent), right.format(indent)),
+            ExpressionType::LessEqualsOperation     (left, right) => format!("({} <= {})", left.format(indent), right.format(indent)),
+            ExpressionType::AdditionOperation       (left, right) => format!("({} + {})", left.format(indent), right.format(indent)),
+            ExpressionType::SubtractionOperation    (left, right) => format!("({} - {})", left.format(indent), right.format(indent)),
+            ExpressionType::MultiplicationOperation (left, right) => format!("({} * {})", left.format(indent), right.format(indent)),
+            ExpressionType::DivisionOperation       (left, right) => format!("({} / {})", left.format(indent), right.format(indent)),
 
-            Self::Atom(atom) => atom.format(indent)
+            ExpressionType::Atom(atom) => atom.format(indent)
 
         }
     }
@@ -140,13 +140,13 @@ impl Expression {
 
 impl Atom {
     fn format(&self, indent : usize) -> String {
-        return match (self) {
+        return match (&self.atom) {
 
-            Self::Literal(lit) => lit.format(indent),
+            AtomType::Literal(lit) => lit.format(indent),
 
-            Self::Expression(expr) => expr.format(indent),
+            AtomType::Expression(expr) => expr.format(indent),
 
-            Self::If(ifs, els) => {
+            AtomType::If(ifs, els) => {
                 format!("{}{}{}",
                     c!(KEYWORD, "if"),
                     ifs.iter()

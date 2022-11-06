@@ -4,6 +4,23 @@ use serde::{
     Serialize,
     Deserialize
 };
+use line_col::LineColLookup;
+
+
+#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
+pub struct Range(pub usize, pub usize);
+impl Range {
+    pub fn to_linecolumn(&self, script : &String) -> LineColumn {
+        let lookup = LineColLookup::new(script);
+        return LineColumn(
+            lookup.get(self.0),
+            lookup.get(self.1)
+        );
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
+pub struct LineColumn(pub (usize, usize), pub (usize, usize));
 
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -16,17 +33,31 @@ pub struct Program {
 pub struct Declaration {
     pub headers : Vec<DeclarationHeader>,
     pub vis     : DeclarationVisibility,
-    pub decl    : DeclarationType
+    pub decl    : DeclarationType,
+    pub range   : Range
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DeclarationHeader {
+    pub header : DeclarationHeaderType,
+    pub range  : Range
 }
 #[derive(Debug, Serialize, Deserialize)]
-pub enum DeclarationHeader {
+pub enum DeclarationHeaderType {
     Entry
 }
-#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
-pub enum DeclarationVisibility {
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DeclarationVisibility {
+    pub vis   : DeclarationVisibilityType,
+    pub range : Range
+}
+#[derive(Debug, Serialize, Deserialize)]
+pub enum DeclarationVisibilityType {
     Public,
     Private
 }
+
 #[derive(Debug, Serialize, Deserialize)]
 pub enum DeclarationType {
     Function(
@@ -39,7 +70,12 @@ pub enum DeclarationType {
 
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum Statement {
+pub struct Statement {
+    pub stmt  : StatementType,
+    pub range : Range
+}
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum StatementType {
     InitVar(
         String,    // Name
         Expression // Value
@@ -48,7 +84,12 @@ pub enum Statement {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum Expression {
+pub struct Expression {
+    pub expr  : ExpressionType,
+    pub range : Range
+}
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum ExpressionType {
 
     EqualsOperation(Box<Expression>, Box<Expression>),
     NotEqualsOperation(Box<Expression>, Box<Expression>),
@@ -66,7 +107,12 @@ pub enum Expression {
 
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum Atom {
+pub struct Atom {
+    pub atom  : AtomType,
+    pub range : Range
+}
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum AtomType {
     Literal(Literal),
     Expression(Box<Expression>),
     If(
@@ -105,5 +151,6 @@ pub struct TypeDescriptor {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Block {
     pub stmts   : Vec<Statement>,
-    pub retlast : bool            // Return the value of the last statement
+    pub retlast : bool,           // Return the value of the last statement
+    pub range   : Range
 }

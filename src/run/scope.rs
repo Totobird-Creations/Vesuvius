@@ -2,17 +2,18 @@ use std::collections::HashMap;
 
 use static_init::dynamic;
 
+use crate::parse::node::Range;
 use crate::run::types::Value;
 
 
 #[dynamic]
 pub static mut PROGRAM_INFO : ProgramInfo = ProgramInfo::new();
-pub static mut SCOPE        : Vec<Scope> = Vec::new();
+pub static mut SCOPE        : Vec<Scope>  = Vec::new();
 
 
 #[derive(Debug)]
 pub struct ProgramInfo {
-    entry : Option<Vec<String>>,
+    pub entry : Option<(Range, Vec<String>)>,
 }
 impl ProgramInfo {
     pub fn new() -> ProgramInfo {
@@ -38,6 +39,16 @@ impl Scope {
         let scope = unsafe{&mut SCOPE};
         let index = scope.len() - 1;
         scope[index].symbols.insert(name.clone(), symbol);
+    }
+    pub fn module_with_sub(sub : &String) -> Vec<String> {
+        let mut module = Vec::new();
+        for scope in unsafe{&SCOPE} {
+            if let Some(name) = &scope.name {
+                module.push(name.clone());
+            }
+        }
+        module.push(sub.clone());
+        return module;
     }
 
     pub fn enter_subscope(name : Option<&String>) {
