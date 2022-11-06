@@ -1,17 +1,23 @@
 #[entry]
 pub fn main {
 
-    let x = 1;
+    let x = test_rand_float;
 
-    if (x == 1) {};
+    if (x == 1.0) {};
 
-    if (x == 2) {
+    if (x == 0.25) {
         1
     }
-    elif (x == 3) {
-        10
+    elif (x == 0.5) {
+        if (test_rand_float == 0.375) {
+            5
+        } elif (test_rand_float == 0.635) {
+            30
+        } else {
+            50
+        }
     }
-    elif (x == 1) {
+    elif (x == 0.75) {
         11;
         12;
         13;
@@ -33,3 +39,5 @@ pub fn main {
     };
 
 };
+
+

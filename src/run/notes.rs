@@ -5,11 +5,31 @@ use static_init::dynamic;
 use crate::parse::node::Range;
 
 
-const DETAILS_SNIPPET_CUTOFF : usize = 1;
-
+const VERTICAL_CUTOFF : usize = 3;
 
 #[dynamic]
 pub(crate) static mut COMPILATION_NOTES : Vec<CompilationNote> = Vec::new();
+
+
+// Different occurance states, with the formatting functions auto generated..
+enum_named!{NoteOccurance {
+    Always,
+    Sometimes,
+    Never
+}}
+
+// Different warning types, with the formatting functions auto generated.
+enum_named!{WarnType {
+    UnstableRelease,
+    BlockContents_Called
+}}
+
+// Different error types, with the formatting functions auto generated.
+enum_named!{ErrorType {
+    DuplicateEntryHeader,
+    InvalidTypeReceived,
+    UnknownSymbol
+}}
 
 
 pub fn dump<'l, S : Into<&'l String>>(script : S) {
@@ -20,19 +40,24 @@ pub fn dump<'l, S : Into<&'l String>>(script : S) {
     );
     let mut line_len = 0;
     let     script   = script.into();
+    // For each note, print a line, and the note.
     for note in lock.iter() {
         let res  = note.fmt(script, &mut counts);
         println!("\x1b[90m{}\x1b[0m\n{}", "─".repeat(max(res.1, line_len)), res.0);
         line_len = res.1;
     }
+    // Print a line after the last note.
     println!("\x1b[90m{}\x1b[0m", "─".repeat(line_len));
+    // Print finished or failed, with the number of each note type.
     {
         let (warns, errors) = counts;
+        // Finished or failed.
         let mut finished = if (errors > 0) {
             String::from("\x1b[31m\x1b[1mFailed\x1b[0m")
         } else {
             String::from("\x1b[32m\x1b[1mFinished\x1b[0m")
         };
+        // Note type counts.
         let mut with = Vec::new();
         if (warns > 0)  {with.push(format!("\x1b[33m{} warning{}\x1b[0m" , warns  , if (warns != 1)  {"s"} else {""}));}
         if (errors > 0) {with.push(format!("\x1b[31m{} error{}\x1b[0m"   , errors , if (errors != 1) {"s"} else {""}));}
@@ -51,11 +76,14 @@ pub fn dump<'l, S : Into<&'l String>>(script : S) {
             }
         }
         finished += ".";
+        // Print final message.
         println!("\n{}", finished);
     }
 }
 
 
+// Add an error to be printed after verification is complete.
+// Errors will prevent compilation.
 #[allow(unused)]
 macro_rules! push_error {
     ($typ:ident, $occur:ident) => {$crate::run::notes::push_error!($typ, $occur, {})};
@@ -64,7 +92,7 @@ macro_rules! push_error {
         let mut lock = COMPILATION_NOTES.write();
         let     note = CompilationNote {
             occurance : NoteOccurance::$occur,
-            level     : NoteType::Error(ErrorType::$typ),
+            note      : NoteType::Error(ErrorType::$typ),
             details   : vec![$(($range, format!($($text)+))),*]
         };
         lock.push(note);
@@ -72,6 +100,8 @@ macro_rules! push_error {
 }
 pub(crate) use push_error;
 
+// Add a warning to be printed after verification is complete.
+// Warnings will not prevent compilation, but will be corrected by the verifier.
 #[allow(unused)]
 macro_rules! push_warn {
     ($typ:ident, $occur:ident) => {$crate::run::notes::push_warn!($typ, $occur, {})};
@@ -80,7 +110,7 @@ macro_rules! push_warn {
         let mut lock = COMPILATION_NOTES.write();
         let     note = CompilationNote {
             occurance : NoteOccurance::$occur,
-            level     : NoteType::Warn(WarnType::$typ),
+            note      : NoteType::Warn(WarnType::$typ),
             details   : vec![$(($range, format!($($text)+))),*]
         };
         lock.push(note);
@@ -91,12 +121,12 @@ pub(crate) use push_warn;
 
 pub struct CompilationNote {
     pub occurance : NoteOccurance,
-    pub level     : NoteType,
+    pub note      : NoteType,
     pub details   : Vec<(Range, String)>
 }
 impl CompilationNote {
     fn fmt(&self, script : &String, counts : &mut (u64, u64)) -> (String, usize) {
-        let text = self.level.fmt(script, &self.occurance, &self.details, counts);
+        let text = self.note.fmt(script, &self.occurance, &self.details, counts);
         return (format!("{}", text.0), text.1);
     }
 }
@@ -106,19 +136,23 @@ pub enum NoteType {
     Error(ErrorType) // User did something that is forbidden.
 }
 impl NoteType {
+    // Return the ansi escape colour code of this note level.
     fn cl(&self) -> &'static str {
         return match (self) {
             Self::Warn  (_) => "\x1b[33m",
             Self::Error (_) => "\x1b[31m"
         }
     }
+    // Return the title of this note level.
     fn pf(&self) -> &'static str {
         return match (self) {
             Self::Warn  (_) => "WARN",
             Self::Error (_) => "ERROR"
         }
     }
+    // Format the note.
     fn fmt(&self, script : &String, occurance : &NoteOccurance, details : &Vec<(Range, String)>, (warns, errors) : &mut (u64, u64)) -> (String, usize) {
+        // Get the note type name.
         let title = match (self) {
             Self::Warn(warn) => {
                 *warns += 1;
@@ -129,42 +163,55 @@ impl NoteType {
                 error.fmt(occurance)
             }
         };
-        let title_unformat = format!("[{}]: {}.",
+        // Get the unformatted note title and get the length. This is used to make the note separators the correct length.
+        let title_len = format!("[{}]: {}.",
             self.pf(),
             title
-        );
+        ).len();
+        // Get the formatted note title.
         let title = format!("{}[{}]\x1b[0m: {}\x1b[1m{}\x1b[0m.",
             self.cl(),
             self.pf(),
             self.cl(),
             title
         );
+        // Get the entire note.
         let text = format!("{}{}",
             title,
             if (details.len() > 0) {
+                // Add details.
                 details.iter().map(|detail| {
-                    let     range      = detail.0.to_linecolumn(script);
-                    let mut lines      = Vec::new();
-                    let mut lines_pad  = 0;
+                    // Get the location of the detail.
+                    let     range       = detail.0.to_linecolumn(script);
+                    // Get the lines, and cut off unneeded information.
+                    let mut lines       = Vec::new();
+                    let mut lines_pad   = 0;
+                    let mut vert_cutoff = None;
                     for l in (range.0.0 - 1)..range.1.0 {
+                        if (l - (range.0.0 - 1) >= VERTICAL_CUTOFF && range.1.0 - l > VERTICAL_CUTOFF) {
+                            if (matches!(vert_cutoff, None)) {
+                                vert_cutoff = Some(l);
+                            }
+                            continue;
+                        }
                         let line     = script.lines().nth(l).unwrap();
-                        let line_pad = l.to_string().len();
+                        let line_pad = (l + 1).to_string().len();
                         if (line_pad > lines_pad) {
                             lines_pad = line_pad;
                         }
-                        lines.push((l, line));
+                        lines.push((l + 1, line));
                     }
-                    while (lines.len() > 4) {
-                        lines.remove(2);
-                    }
-                    format!("{}{}{}{}\n{}",
-                        format!("\n  \x1b[90m┌\x1b[0m `\x1b[94m{}\x1b[0m` \x1b[94m\x1b[1m{}\x1b[0m\x1b[34m:\x1b[94m\x1b[1m{}\x1b[0m\x1b[34m..\x1b[0m\x1b[94m\x1b[1m{}\x1b[0m\x1b[34m:\x1b[0m\x1b[94m\x1b[1m{}\x1b[0m",
+                    // Format the detail.
+                    format!("\n{}{}{}{}\n{}",
+                        // Location of the detail.
+                        format!("  \x1b[90m┌\x1b[0m `\x1b[94m{}\x1b[0m` \x1b[94m\x1b[1m{}\x1b[0m\x1b[34m:\x1b[94m\x1b[1m{}\x1b[0m\x1b[34m..\x1b[0m\x1b[94m\x1b[1m{}\x1b[0m\x1b[34m:\x1b[0m\x1b[94m\x1b[1m{}\x1b[0m",
                             "todo_filename.vsv",
                             range.0.0,
                             range.0.1,
                             range.1.0,
                             range.1.1
                         ),
+                        // If the detail is multi line, add a marker showing the start of the detail, with a line to eol.
                         if (lines.len() > 1) {
                             format!("\n  \x1b[90m│ {} │\x1b[0m\x1b[95m{}┌{}\x1b[0m",
                                 " ".repeat(lines_pad),
@@ -172,11 +219,23 @@ impl NoteType {
                                 "─".repeat(lines[0].1.len() - range.0.1)
                             )
                         } else {String::new()},
+                        // Add the code line.
                         lines.iter().map(|(l, line)| {
-                            format!("\n  \x1b[90m│\x1b[0m \x1b[94m\x1b[2m{: >lines_pad$}\x1b[0m \x1b[90m│\x1b[0m {}", l, line)
+                            format!("\n  \x1b[90m│\x1b[0m \x1b[94m\x1b[2m{: >lines_pad$}\x1b[0m \x1b[90m│\x1b[0m {}{}",
+                                l, line,
+                                // If some of the lines were cut off, add an empty line and some dots.
+                                if let Some(vert_cutoff) = vert_cutoff {
+                                    if (vert_cutoff == *l) {
+                                        format!("\n  \x1b[90m│\x1b[0m \x1b[94m\x1b[2m{}\x1b[0m \x1b[90m│\x1b[0m",
+                                            "·".repeat(lines_pad)
+                                        )
+                                    } else {String::new()}
+                                } else {String::new()}
+                            )
                         }).collect::<Vec<_>>().join(""),
                         format!("\n  \x1b[90m│ {} │\x1b[0m\x1b[95m{}\x1b[0m",
                             " ".repeat(lines_pad),
+                            // If the detail is single line, add a marker showing the start and end of the detail.
                             if (lines.len() <= 1) {
                                 format!("{}{}",
                                     " ".repeat(range.0.1),
@@ -186,37 +245,25 @@ impl NoteType {
                                         format!("└{}┘", "─".repeat(range.1.1 - range.0.1 - 2))
                                     } else {String::new()}
                                 )
-                            } else {format!("{}┘", "─".repeat(range.1.1 - 1))}
+                            // If the detail is multi line, add a marker showing the end of the detail, with a line from the sol.
+                            } else {format!(" {}┘", "─".repeat(range.1.1 - 2))}
                         ),
-                        format!("  \x1b[90m└\x1b[0m {}{}\x1b[0m", self.cl(), detail.1)
+                        // The detail message.
+                        format!("  \x1b[90m└─{}─┴──\x1b[0m {}{}\x1b[0m", "─".repeat(lines_pad), self.cl(), detail.1)
                     )
                 }).collect::<Vec<_>>().join("")
             } else {
+                // If no details were provided, mention it.
                 String::from("\n  \x1b[90m\x1b[3mNo other details provided.\x1b[0m")
             }
         );
-        return (text, title_unformat.len());
+        return (text, title_len);
     }
 }
 
-enum_named!{NoteOccurance {
-    Always,
-    Sometimes,
-    Never
-}}
-
-enum_named!{WarnType {
-    UnstableRelease,
-    BlockContents_Called
-}}
-
-enum_named!{ErrorType {
-    DuplicateEntry,
-    InvalidTypeReceived
-}}
 
 
-
+// Auto generate functions for formatting a note type, with an occurance state.
 macro_rules! enum_named {
     {$name:ident {$($variant:ident),*}} => {
         #[allow(non_camel_case_types)]

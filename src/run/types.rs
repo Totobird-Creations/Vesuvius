@@ -1,4 +1,8 @@
-use std::cmp::Ordering;
+use std::cmp::{
+    Ordering,
+    min,
+    max
+};
 use std::str::FromStr;
 
 use num_bigint::{
@@ -18,10 +22,16 @@ pub enum TestResponse {
 }
 
 #[derive(Debug, Clone)]
-pub struct ValConstr<T : PartialEq>(pub Vec<T>);
-impl<T : PartialEq> ValConstr<T> {
+pub struct ValConstr<T : PartialEq + Clone>(pub Vec<T>);
+impl<T : PartialEq + Clone> ValConstr<T> {
     pub fn failed() -> ValConstr<T> {
         return ValConstr(Vec::new());
+    }
+
+    pub fn combine(&self, other : &ValConstr<T>) -> ValConstr<T> {
+        let mut joined = self.0.clone();
+        joined.append(&mut other.0.clone());
+        return ValConstr(joined);
     }
 
     pub fn test(&self, value : &T) -> TestResponse {
@@ -38,9 +48,12 @@ impl<T : PartialEq> ValConstr<T> {
         };
     }
 
-    pub fn equals(&self, other : &ValConstr<T>) -> Value {
+    pub fn equals(&self, other : &ValConstr<T>, range : Range) -> Value {
         if (self.0.len() <= 0) {
-            return Value::Bool(ValConstr::failed());
+            return Value {
+                value : ValueType::Bool(ValConstr::failed()),
+                range
+            };
         }
         let mut t = false;
         let mut f = false;
@@ -55,15 +68,25 @@ impl<T : PartialEq> ValConstr<T> {
         let mut v = Vec::new();
         if (t) {v.push(true);}
         if (f) {v.push(false);}
-        return Value::Bool(ValConstr(v));
+        return Value {
+            value : ValueType::Bool(ValConstr(v)),
+            range
+        };
     }
 
 }
 
 #[derive(Debug, Clone)]
-pub struct ValConstrOrd<T : PartialEq + PartialOrd>(pub Vec<ValConstrRange<T>>);
-impl<T : PartialEq + PartialOrd> ValConstrOrd<T> {
-    pub fn equals(&self, other : &ValConstrOrd<T>) -> Value {
+pub struct ValConstrOrd<T : PartialEq + PartialOrd + Clone>(pub Vec<ValConstrRange<T>>);
+impl<T : PartialEq + PartialOrd + Clone> ValConstrOrd<T> {
+
+    pub fn combine(&self, other : &ValConstrOrd<T>) -> ValConstrOrd<T> {
+        let mut joined = self.0.clone();
+        joined.append(&mut other.0.clone());
+        return ValConstrOrd(joined);
+    }
+
+    pub fn equals(&self, other : &ValConstrOrd<T>, range : Range) -> Value {
         let mut t = false;
         let mut f = false;
         for sval in &self.0 {
@@ -76,8 +99,12 @@ impl<T : PartialEq + PartialOrd> ValConstrOrd<T> {
         let mut v = Vec::new();
         if (t) {v.push(true);}
         if (f) {v.push(false);}
-        return Value::Bool(ValConstr(v));
+        return Value {
+            value : ValueType::Bool(ValConstr(v)),
+            range
+        };
     }
+
 }
 
 #[derive(Debug, Clone)]
@@ -134,7 +161,12 @@ impl<T : PartialEq + PartialOrd> ValConstrRange<T> {
 
 
 #[derive(Debug, Clone)]
-pub enum Value {
+pub struct Value {
+    pub value : ValueType,
+    pub range : Range
+}
+#[derive(Debug, Clone)]
+pub enum ValueType {
     Void,
 
     Function(Box<Vec<(String, Value)>>, Box<Option<Value>>, Block),
@@ -145,22 +177,60 @@ pub enum Value {
     Bool(ValConstr<bool>)
 
 }
+
 impl Value {
+
+    pub fn type_def(&self) -> String {
+        return match (&self.value) {
+
+            ValueType::Void                   => String::from("void"),
+
+            ValueType::Function(args, ret, _) => format!("fn({}){}",
+                args.iter().map(|(name, typ)| format!("{}: {}", name, typ.type_def())).collect::<Vec<_>>().join(""),
+                if let Some(ret) = &**ret {format!(" -> {}", ret.type_def())}
+                else {String::new()}
+            ),
+
+            ValueType::Int(_)   => String::from("int"),
+
+            ValueType::Float(_) => String::from("float"),
+
+            ValueType::Bool(_)  => String::from("bool")
+
+        }
+    }
 
     pub fn matches_type(&self, other : &Value) -> bool {
         return
-            if      (matches!(self, Self::Int   (_) ) && matches!(other, Self::Int   (_) )) {true}
-            else if (matches!(self, Self::Float (_) ) && matches!(other, Self::Float (_) )) {true}
-            else if (matches!(self, Self::Bool  (_) ) && matches!(other, Self::Bool  (_) )) {true}
+            if      (matches!(self.value, ValueType::Void      ) && matches!(other.value, ValueType::Void      )) {true}
+            else if (matches!(self.value, ValueType::Int   (_) ) && matches!(other.value, ValueType::Int   (_) )) {true}
+            else if (matches!(self.value, ValueType::Float (_) ) && matches!(other.value, ValueType::Float (_) )) {true}
+            else if (matches!(self.value, ValueType::Bool  (_) ) && matches!(other.value, ValueType::Bool  (_) )) {true}
             else {false}
     }
 
+    pub fn combine(&self, other : &Value) -> Value {
+        let range = Range(min(self.range.0, other.range.0), max(self.range.1, other.range.1));
+        return match ((&self.value, &other.value)) {
+            (ValueType::Void      , ValueType::Void      ) => {Value {value : ValueType::Void                  , range}},
+            (ValueType::Int   (l) , ValueType::Int   (r) ) => {Value {value : ValueType::Int   (l.combine(&r)) , range}},
+            (ValueType::Float (l) , ValueType::Float (r) ) => {Value {value : ValueType::Float (l.combine(&r)) , range}},
+            (ValueType::Bool  (l) , ValueType::Bool  (r) ) => {Value {value : ValueType::Bool  (l.combine(&r)) , range}},
+            _ => {panic!("INTERNAL ERROR")}
+        };
+    }
+
     pub fn equals(&self, other : &Value) -> Value {
-        return match ((self, other)) {
-            (Self::Int   (l) , Self::Int   (r) ) => {l.equals(&r)},
-            (Self::Float (l) , Self::Float (r) ) => {l.equals(&r)},
-            (Self::Bool  (l) , Self::Bool  (r) ) => {l.equals(&r)},
-            _ => {Value::Bool(ValConstr(vec![false]))}
+        let range = Range(min(self.range.0, other.range.0), max(self.range.1, other.range.1));
+        return match ((&self.value, &other.value)) {
+            (ValueType::Void      , ValueType::Void      ) => {Value {value : ValueType::Bool(ValConstr(vec![true])), range : range}},
+            (ValueType::Int   (l) , ValueType::Int   (r) ) => {l.equals(&r, range)},
+            (ValueType::Float (l) , ValueType::Float (r) ) => {l.equals(&r, range)},
+            (ValueType::Bool  (l) , ValueType::Bool  (r) ) => {l.equals(&r, range)},
+            _ => {Value {
+                value : ValueType::Bool(ValConstr(vec![false])),
+                range
+            }}
         };
     }
 

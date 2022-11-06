@@ -28,18 +28,23 @@ impl Declaration {
     fn verify_register(&self) {
         match (&self.decl) {
 
-            DeclarationType::Function(name, _, _, block) => {
-                Scope::add_symbol(name, Symbol::from(Value::Function(
-                    Box::new(Vec::new()), Box::new(None), block.clone()
-                )));
+            DeclarationType::Function(name, range, _, _, block) => {
+                // Add the function to the scope.
+                Scope::add_symbol(name, Symbol::from(Value {
+                    value : ValueType::Function(
+                        Box::new(Vec::new()), Box::new(None), block.clone()
+                    ),
+                    range : *range
+                }));
+                // If another entry function is already defined, throw an error, otherwise set it.
                 for header in &self.headers {
                     match (&header.header) {
                         DeclarationHeaderType::Entry => {
                             let mut lock = scope::PROGRAM_INFO.write();
                             if let Some((range, _)) = lock.entry {
-                                push_error!(DuplicateEntry, Always, {
-                                    range        => {"#[entry] already defined here."},
-                                    header.range => {"#[entry] used again here."}
+                                push_error!(DuplicateEntryHeader, Always, {
+                                    range        => {"Already used here."},
+                                    header.range => {"Used again here."}
                                 });
                             } else {
                                 lock.entry = Some((header.range, Scope::module_with_sub(name)));
@@ -56,7 +61,7 @@ impl Declaration {
     fn verify_contents(&self) {
         match (&self.decl) {
 
-            DeclarationType::Function(name, _, _, block) => {
+            DeclarationType::Function(name, _, _, _, block) => {
                 block.verify(Some(name));
             }
 
@@ -74,10 +79,14 @@ impl Statement {
                 expr.verify()
             },
 
-            StatementType::InitVar(name, value) => {
-                Scope::add_symbol(&name, Symbol::from(value.verify()));
-                
-                return Value::Void;
+            StatementType::InitVar(name, range, value) => {
+                let mut value = value.verify();
+                value.range = *range;
+                Scope::add_symbol(&name, Symbol::from(value));
+                return Value {
+                    value : ValueType::Void,
+                    range : self.range
+                };
             }
 
         }
@@ -93,13 +102,16 @@ impl Expression {
                 let left_val  = left  .verify();
                 let right_val = right .verify();
                 if (left_val.matches_type(&right_val)) {
-                        left_val.equals(&right_val)
+                    left_val.equals(&right_val)
                 } else {
                     push_error!(InvalidTypeReceived, Always, {
                         left.range  => {"Does not match type of right side."},
                         right.range => {"Does not match type of left side."}
                     });
-                    Value::Bool(ValConstr::failed())
+                    Value {
+                        value : ValueType::Bool(ValConstr::failed()),
+                        range : self.range
+                    }
                 }
             },
 
@@ -155,46 +167,103 @@ impl Atom {
             AtomType::Expression(expr) => expr.verify(),
 
             AtomType::If(ifs, els) => {
+                let mut ret : Option<Value> = None;
                 for i in 0..ifs.len() {
-                    let (condition, block) = &ifs[i];
-                    // TODO : Check for different return types.
-                    let cond_val = condition.verify();
-                    if let Value::Bool(cond_val) = cond_val {
+                    let (condition, block, range) = &ifs[i];
+                    let cond_val                  = condition.verify();
+                    if let ValueType::Bool(cond_val) = cond_val.value {
                         match (cond_val.test(&true)) {
+
                             TestResponse::Always => {
                                 push_warn!(BlockContents_Called, Always, {
                                     condition.range => {"Condition always succeeds."},
-                                    block.range     => {"Consider {}?", if (i == 0) {"removing if statement"} else {"replacing this case with else"}}
+                                    *range          => {"Consider {}?", if (i == 0) {"removing if statement"} else {"replacing this case with else"}}
                                 });
-                                /*push_warn!(BlockContents_Called, Always, "{}", if (i == 0) {
-                                    "Condition always succeeds. Consider removing if statement?"
+                                let mut value = block.verify(None);
+                                if let Some(ret_value) = &mut ret {
+                                    if (ret_value.matches_type(&value)) {
+                                        let mut ret = ret_value.combine(&value);
+                                        ret.range   = Range(ret.range.0, range.1);
+                                        return ret;
+                                    } else {
+                                        push_error!(InvalidTypeReceived, Always, {
+                                            ret_value.range => {"First case returns `{}`" , ret_value.type_def() },
+                                            value.range     => {"This case returns `{}`"     , value.type_def()     }
+                                        })
+                                    }
                                 } else {
-                                    "Condition always succeeds. Consider replacing this case with else?"
-                                });*/
-                                return block.verify(None);
+                                    value.range = *range;
+                                    return value;
+                                }
                             },
+
                             TestResponse::Never => {
                                 push_warn!(BlockContents_Called, Never, {
                                     condition.range => {"Condition always fails."},
-                                    block.range     => {"Consider removing case?"}
+                                    *range          => {"Consider removing case?"}
                                 });
                             },
+
                             TestResponse::Sometimes => {
-                                block.verify(None);
+                                let mut value = block.verify(None);
+                                if let Some(ret_value) = &mut ret {
+                                    if (ret_value.matches_type(&value)) {
+                                        *ret_value      = ret_value.combine(&value);
+                                        ret_value.range = Range(ret_value.range.0, range.1);
+                                    } else {
+                                        push_error!(InvalidTypeReceived, Always, {
+                                            ret_value.range => {"First case returns `{}`" , ret_value.type_def() },
+                                            *range          => {"This case returns `{}`"     , value.type_def()     }
+                                        })
+                                    }
+                                } else {
+                                    value.range = *range;
+                                    ret         = Some(value);
+                                }
                             },
+
                             TestResponse::Failed => {}
+
                         }
                     } else {
                         push_error!(InvalidTypeReceived, Always, {
-                            condition.range => {"Must be of type `bool`"}
+                            condition.range => {"Must be of type `bool`, but got `{}`", cond_val.type_def()}
                         });
-                        return Value::Void;
                     }
                 }
-                if let Some(els) = els {
-                    return els.verify(None);
+                if let Some((block, range)) = els {
+                    let mut value = block.verify(None);
+                    if let Some(ret_value) = &mut ret {
+                        if (ret_value.matches_type(&value)) {
+                            *ret_value         = ret_value.combine(&value);
+                            (*ret_value).range = *range;
+                            return ret_value.clone();
+                        } else {
+                            push_error!(InvalidTypeReceived, Always, {
+                                ret_value.range => {"Previous case returns `{}`" , ret_value.type_def() },
+                                value.range     => {"Else case returns `{}`"     , value.type_def()     }
+                            })
+                        }
+                    } else {
+                        value.range = *range;
+                        return value;
+                    }
+                } else if let Some(ret_value) = &ret {
+                    if (! matches!(ret_value.value, ValueType::Void)) {
+                        push_error!(InvalidTypeReceived, Always, {
+                            ret_value.range                   => {"Previous case returns `{}`" , ret_value.type_def() },
+                            Range(self.range.1, self.range.1) => {"Lack of else case imlpies `void`"                  }
+                        })
+                    }
                 }
-                return Value::Void;
+                return if let Some(ret_value) = ret {
+                    return ret_value;
+                } else {
+                    Value {
+                        value : ValueType::Void,
+                        range : self.range
+                    }
+                };
             }
             
         }
@@ -204,18 +273,37 @@ impl Atom {
 
 impl Literal {
     fn verify(&self) -> Value {
-        return match (self) {
+        return Value {
+            value : match (&self.lit) {
 
-            Self::Int(val) => Value::Int(ValConstrOrd(vec![ValConstrRange::Exact(
-                ValuePossiblyBigInt::from(val)
-            )])),
+                LiteralType::Int(val) => ValueType::Int(ValConstrOrd(vec![ValConstrRange::Exact(
+                    ValuePossiblyBigInt::from(val)
+                )])),
 
-            Self::Float(int, dec) => Value::Float(ValConstrOrd(vec![ValConstrRange::Exact(
-                ValuePossiblyBigFloat::from(&format!("{}.{}", int, dec))
-            )])),
+                LiteralType::Float(int, dec) => ValueType::Float(ValConstrOrd(vec![ValConstrRange::Exact(
+                    ValuePossiblyBigFloat::from(&format!("{}.{}", int, dec))
+                )])),
 
-            Self::Identifier(name) => Scope::get_symbol(name).value.clone()
+                LiteralType::Identifier(name) => {
+                    if (name == "test_rand_float") {
+                        ValueType::Float(ValConstrOrd(vec![
+                            ValConstrRange::MinInMaxIn(
+                                ValuePossiblyBigFloat::Small(0.0),
+                                ValuePossiblyBigFloat::Small(1.0)
+                            )
+                        ]))
+                    } else if let Some(symbol) = Scope::get_symbol(name) {
+                        symbol.value.value.clone()
+                    } else {
+                        push_error!(UnknownSymbol, Always, {
+                            self.range => {"Symbol is not found in current scope."}
+                        });
+                        ValueType::Void
+                    }
+                }
 
+            },
+            range : self.range
         }
     }
 }
@@ -224,11 +312,17 @@ impl Literal {
 impl Block {
     fn verify(&self, name : Option<&String>) -> Value {
         Scope::enter_subscope(name);
-        let mut ret   = Value::Void;
+        let mut ret = Value {
+            value : ValueType::Void,
+            range : self.range
+        };
         for stmt in &self.stmts {
-            ret = stmt.verify();
+            let value = stmt.verify();
+            if (self.retlast) {
+                ret = value;
+            }
         }
         Scope::exit_subscope();
-        return if (self.retlast) {ret} else {Value::Void};
+        return ret;
     }
 }

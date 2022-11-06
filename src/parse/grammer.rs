@@ -68,14 +68,14 @@ parser! {pub grammar parser() for str {
 
 
     rule declaration_function() -> DeclarationType
-        = "fn" __ name:ident() _ /* TODO : Arguments and return */ block:block()
-            {DeclarationType::Function(name, Vec::new(), None, block)}
+        = "fn" __ start:position!() name:ident() end:position!() _ /* TODO : Arguments and return */ block:block()
+            {DeclarationType::Function(name, Range(start, end), Vec::new(), None, block)}
 
 
 
     rule statement() -> Statement
-        = start:position!() stmt:("let" __ name:ident() _ "=" _ value:expression()
-            {StatementType::InitVar(name, value)}
+        = start:position!() stmt:("let" __ start_name:position!() name:ident() end_name:position!() _ "=" _ value:expression()
+            {StatementType::InitVar(name, Range(start_name, end_name), value)}
         / expr:expression()
             {StatementType::Expression(expr)}
         ) end:position!() {Statement {
@@ -173,11 +173,11 @@ parser! {pub grammar parser() for str {
         }}
     
     rule atom_if() -> AtomType
-        = "if" _ "(" _ ifcondi:expression() _ ")" _ ifblock:block() _
-          elf:("elif" _ "(" _ elifcondi:expression() _ ")" _ elifblock:block() _ {(Box::new(elifcondi), elifblock)})*
-          els:("else" _ elseblock:block() {elseblock})?
+        = ifstart:position!() "if" _ "(" _ ifcondi:expression() _ ")" _ ifblock:block() ifend:position!() _
+          elf:(elifstart:position!() "elif" _ "(" _ elifcondi:expression() _ ")" _ elifblock:block() elifend:position!() _ {(Box::new(elifcondi), elifblock, Range(elifstart, elifend))})*
+          els:(elsestart:position!() "else" _ elseblock:block() elseend:position!() {(elseblock, Range(elsestart, elseend))})?
             {
-                let mut ifs  = vec![(Box::new(ifcondi), ifblock)];
+                let mut ifs  = vec![(Box::new(ifcondi), ifblock, Range(ifstart, ifend))];
                 let mut elf = elf;
                 ifs.append(&mut elf);
                 AtomType::If(
@@ -188,14 +188,18 @@ parser! {pub grammar parser() for str {
 
 
     rule literal() -> Literal
-        = ident:ident()
-            {Literal::Identifier(ident)}
+        = start:position!() lit:(ident:ident()
+            {LiteralType::Identifier(ident)}
         / int:['0'..='9']+ dec:("." b:['0'..='9']+ {b})?
             {if let Some(dec) = dec {
-                Literal::Float(int.into_iter().collect(), dec.into_iter().collect())
+                LiteralType::Float(int.into_iter().collect(), dec.into_iter().collect())
             } else {
-                Literal::Int(int.into_iter().collect())
+                LiteralType::Int(int.into_iter().collect())
             }}
+        ) end:position!() {Literal {
+            lit,
+            range : Range(start, end)
+        }}
 
     rule block() -> Block
         = start:position!() "{" _ b:(s:((_ s:statement() _ {s}) ++ ";") r:";"? {(s, r)})? _ "}" end:position!()

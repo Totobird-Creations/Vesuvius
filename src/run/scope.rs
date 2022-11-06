@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::cell::UnsafeCell;
 
 use static_init::dynamic;
 
@@ -26,19 +27,28 @@ impl ProgramInfo {
 #[derive(Debug)]
 pub struct Scope {
     pub name    : Option<String>,
-    pub symbols : HashMap<String, Symbol>
+    // TODO : Do something about this unsafecell.
+    // It's unsafe, possibly unsound if I screw something up elsewhere.
+    pub symbols : HashMap<String, UnsafeCell<Symbol>>
 }
 impl Scope {
-    pub fn get_symbol(name : &String) -> &mut Symbol {
-        let scope = unsafe{&mut SCOPE}; 
-        let index = scope.len() - 1;
-        return scope[index].symbols.get_mut(name).unwrap();
-        //panic!("Unknown symbol `{}`", name);
+    pub fn get_symbol(name : &String) -> Option<&mut Symbol> {
+        let     scopes = unsafe{&mut SCOPE}; 
+        let mut index  = scopes.len() - 1;
+        loop {
+            let scope = &scopes[index];
+            if let Some(symbol) = scope.symbols.get(name) {
+                return Some(unsafe{&mut *symbol.get()});
+            }
+            if (index == 0) {break;}
+            else {index -= 1;}
+        }
+        return None;
     }
     pub fn add_symbol(name : &String, symbol : Symbol) {
         let scope = unsafe{&mut SCOPE};
         let index = scope.len() - 1;
-        scope[index].symbols.insert(name.clone(), symbol);
+        scope[index].symbols.insert(name.clone(), UnsafeCell::new(symbol));
     }
     pub fn module_with_sub(sub : &String) -> Vec<String> {
         let mut module = Vec::new();

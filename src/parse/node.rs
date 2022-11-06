@@ -62,6 +62,7 @@ pub enum DeclarationVisibilityType {
 pub enum DeclarationType {
     Function(
         String,                        // Name
+        Range,                         // Name Range
         Vec<(String, TypeDescriptor)>, // Arguments
         Option<TypeDescriptor>,        // Return
         Block                          // Block
@@ -78,6 +79,7 @@ pub struct Statement {
 pub enum StatementType {
     InitVar(
         String,    // Name
+        Range,     // Name Range
         Expression // Value
     ),
     Expression(Expression)
@@ -118,14 +120,23 @@ pub enum AtomType {
     If(
         Vec<(
             Box<Expression>, // Condition
-            Block            // Block
+            Block,           // Block
+            Range
         )>,
-        Option<Block>        // Else block
+        Option<(
+            Block, // Else block
+            Range
+        )>
     )
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum Literal {
+pub struct Literal {
+    pub lit   : LiteralType,
+    pub range : Range
+}
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum LiteralType {
     Int(String),
     Float(
         String, // Integer

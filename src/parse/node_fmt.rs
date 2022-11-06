@@ -84,7 +84,7 @@ impl DeclarationType {
     fn format(&self, indent : usize) -> String {
         return match (self) {
 
-            Self::Function(name, _args, _ret, block) => {
+            Self::Function(name, _, _args, _ret, block) => {
                 format!("{} {} {}",
                     c!(OBJECT, "fn"),
                     c!(NAME, name),
@@ -101,7 +101,7 @@ impl Statement {
     fn format(&self, indent : usize) -> String {
         return match (&self.stmt) {
 
-            StatementType::InitVar(name, value) => {
+            StatementType::InitVar(name, _, value) => {
                 format!("{} {} = {}",
                     c!(KEYWORD, "let"),
                     c!(NAME, name),
@@ -150,16 +150,16 @@ impl Atom {
                 format!("{}{}{}",
                     c!(KEYWORD, "if"),
                     ifs.iter()
-                        .map(|i| format!(" ({}) {}",
-                            i.0.format(indent),
-                            i.1.format(indent)
+                        .map(|(condition, block, _)| format!(" ({}) {}",
+                            condition.format(indent),
+                            block.format(indent)
                         ))
                         .collect::<Vec<String>>()
                         .join(&format!("\n{}{}",
                             INDENT.repeat(indent),
                             c!(KEYWORD, "elif")
                         )),
-                    if let Some(els) = els {
+                    if let Some((els, _)) = els {
                         format!("\n{}{} {}",
                             INDENT.repeat(indent),
                             c!(KEYWORD, "else"),
@@ -178,18 +178,18 @@ impl Atom {
 
 impl Literal {
     fn format(&self, _indent : usize) -> String {
-        return match (self) {
+        return match (&self.lit) {
 
-            Self::Int(int) => c!(LIT_NUMERIC, int),
+            LiteralType::Int(int) => c!(LIT_NUMERIC, int),
 
-            Self::Float(int, dec) => {
+            LiteralType::Float(int, dec) => {
                 format!("{}.{}",
                     c!(LIT_NUMERIC, int),
                     c!(LIT_NUMERIC, dec)
                 )
             },
 
-            Self::Identifier(name) => c!(NAME, name)
+            LiteralType::Identifier(name) => c!(NAME, name)
 
         }
     }
