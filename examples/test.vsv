@@ -3,7 +3,7 @@ use std::consts::true;
 #[entry]
 pub fn main() {
     let x = 1;
-    x += 1;
+    x = x + 1;
     if (x == 2 && true) {
 //  ^^  ^^^^^^    ^^^^
 //  |   ^^^^^^^^^^^^^^ Unnecessary : Always true.
