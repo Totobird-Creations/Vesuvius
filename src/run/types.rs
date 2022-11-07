@@ -74,6 +74,32 @@ impl<T : PartialEq + Clone> ValConstr<T> {
         };
     }
 
+    pub fn not_equals(&self, other : &ValConstr<T>, range : Range) -> Value {
+        if (self.0.len() <= 0) {
+            return Value {
+                value : ValueType::Bool(ValConstr::failed()),
+                range
+            };
+        }
+        let mut t = false;
+        let mut f = false;
+        for sval in &self.0 {
+            for oval in &other.0 {
+                if (sval == oval) {t = true;}
+                if (sval != oval) {f = true;}
+                if (t && f) {break;}
+            }
+            if (t && f) {break;}
+        }
+        let mut v = Vec::new();
+        if (t) {v.push(false);}
+        if (f) {v.push(true);}
+        return Value {
+            value : ValueType::Bool(ValConstr(v)),
+            range
+        };
+    }
+
 }
 
 #[derive(Debug, Clone)]
@@ -99,6 +125,25 @@ impl<T : PartialEq + PartialOrd + Clone> ValConstrOrd<T> {
         let mut v = Vec::new();
         if (t) {v.push(true);}
         if (f) {v.push(false);}
+        return Value {
+            value : ValueType::Bool(ValConstr(v)),
+            range
+        };
+    }
+
+    pub fn not_equals(&self, other : &ValConstrOrd<T>, range : Range) -> Value {
+        let mut t = false;
+        let mut f = false;
+        for sval in &self.0 {
+            for oval in &other.0 {
+                sval.equals(&oval, &mut t, &mut f);
+                if (t && f) {break;}
+            }
+            if (t && f) {break;}
+        }
+        let mut v = Vec::new();
+        if (t) {v.push(false);}
+        if (f) {v.push(true);}
         return Value {
             value : ValueType::Bool(ValConstr(v)),
             range
@@ -223,12 +268,26 @@ impl Value {
     pub fn equals(&self, other : &Value) -> Value {
         let range = Range(min(self.range.0, other.range.0), max(self.range.1, other.range.1));
         return match ((&self.value, &other.value)) {
-            (ValueType::Void      , ValueType::Void      ) => {Value {value : ValueType::Bool(ValConstr(vec![true])), range : range}},
+            (ValueType::Void      , ValueType::Void      ) => {Value {value : ValueType::Bool(ValConstr(vec![true])), range}},
             (ValueType::Int   (l) , ValueType::Int   (r) ) => {l.equals(&r, range)},
             (ValueType::Float (l) , ValueType::Float (r) ) => {l.equals(&r, range)},
             (ValueType::Bool  (l) , ValueType::Bool  (r) ) => {l.equals(&r, range)},
             _ => {Value {
                 value : ValueType::Bool(ValConstr(vec![false])),
+                range
+            }}
+        };
+    }
+
+    pub fn not_equals(&self, other : &Value) -> Value {
+        let range = Range(min(self.range.0, other.range.0), max(self.range.1, other.range.1));
+        return match ((&self.value, &other.value)) {
+            (ValueType::Void      , ValueType::Void      ) => {Value {value : ValueType::Bool(ValConstr(vec![true])), range}},
+            (ValueType::Int   (l) , ValueType::Int   (r) ) => {l.not_equals(&r, range)},
+            (ValueType::Float (l) , ValueType::Float (r) ) => {l.not_equals(&r, range)},
+            (ValueType::Bool  (l) , ValueType::Bool  (r) ) => {l.not_equals(&r, range)},
+            _ => {Value {
+                value : ValueType::Bool(ValConstr(vec![true])),
                 range
             }}
         };

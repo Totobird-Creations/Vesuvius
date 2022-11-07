@@ -11,7 +11,7 @@ pub fn main {
     elif (x == 0.5) {
         let y = if (test_rand_float == 0.375) {
             5
-        } elif (test_rand_float == 1.635) {
+        } elif (test_rand_float != 1.635) {
             30
         } else {
             50

@@ -115,8 +115,21 @@ impl Expression {
                 }
             },
 
-            ExpressionType::NotEqualsOperation(_, _) => {
-                todo!()
+            ExpressionType::NotEqualsOperation(left, right) => {
+                let left_val  = left  .verify();
+                let right_val = right .verify();
+                if (left_val.matches_type(&right_val)) {
+                    left_val.not_equals(&right_val)
+                } else {
+                    push_error!(InvalidTypeReceived, Always, {
+                        left.range  => {"Does not match type of right side."},
+                        right.range => {"Does not match type of left side."}
+                    });
+                    Value {
+                        value : ValueType::Bool(ValConstr::failed()),
+                        range : self.range
+                    }
+                }
             },
 
             ExpressionType::GreaterOperation(_, _) => {
