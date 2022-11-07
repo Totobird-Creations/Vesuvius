@@ -1,17 +1,16 @@
 use std::cmp::{
-    Ordering,
     min,
     max
 };
-use std::str::FromStr;
 
 use num_bigint::{
     BigInt,
-    ToBigInt
+    BigUint
 };
-use num_bigfloat::BigFloat;
 
 use crate::parse::node::*;
+use crate::run::type_custom::*;
+use crate::run::notes::push_error;
 
 
 pub enum TestResponse {
@@ -22,8 +21,8 @@ pub enum TestResponse {
 }
 
 #[derive(Debug, Clone)]
-pub struct ValConstr<T : PartialEq + Clone>(pub Vec<T>);
-impl<T : PartialEq + Clone> ValConstr<T> {
+pub struct ValConstr<T : TryBoolOps<Self>>(pub Vec<T>);
+impl<T : TryBoolOps<Self>> ValConstr<T> {
     pub fn failed() -> ValConstr<T> {
         return ValConstr(Vec::new());
     }
@@ -48,63 +47,11 @@ impl<T : PartialEq + Clone> ValConstr<T> {
         };
     }
 
-    pub fn equals(&self, other : &ValConstr<T>, range : Range) -> Value {
-        if (self.0.len() <= 0) {
-            return Value {
-                value : ValueType::Bool(ValConstr::failed()),
-                range
-            };
-        }
-        let mut t = false;
-        let mut f = false;
-        for sval in &self.0 {
-            for oval in &other.0 {
-                if (sval == oval) {t = true;}
-                if (sval != oval) {f = true;}
-                if (t && f) {break;}
-            }
-            if (t && f) {break;}
-        }
-        let mut v = Vec::new();
-        if (t) {v.push(true);}
-        if (f) {v.push(false);}
-        return Value {
-            value : ValueType::Bool(ValConstr(v)),
-            range
-        };
-    }
-
-    pub fn not_equals(&self, other : &ValConstr<T>, range : Range) -> Value {
-        if (self.0.len() <= 0) {
-            return Value {
-                value : ValueType::Bool(ValConstr::failed()),
-                range
-            };
-        }
-        let mut t = false;
-        let mut f = false;
-        for sval in &self.0 {
-            for oval in &other.0 {
-                if (sval == oval) {t = true;}
-                if (sval != oval) {f = true;}
-                if (t && f) {break;}
-            }
-            if (t && f) {break;}
-        }
-        let mut v = Vec::new();
-        if (t) {v.push(false);}
-        if (f) {v.push(true);}
-        return Value {
-            value : ValueType::Bool(ValConstr(v)),
-            range
-        };
-    }
-
 }
 
-#[derive(Debug, Clone)]
-pub struct ValConstrOrd<T : PartialEq + PartialOrd + Clone>(pub Vec<ValConstrRange<T>>);
-impl<T : PartialEq + PartialOrd + Clone> ValConstrOrd<T> {
+#[derive(Debug)]
+pub struct ValConstrOrd<T : TryOps<Self>>(pub ValConstrState<ValConstrRange<T>>);
+impl<T : TryOps<Self>> ValConstrOrd<T> {
 
     pub fn combine(&self, other : &ValConstrOrd<T>) -> ValConstrOrd<T> {
         let mut joined = self.0.clone();
@@ -112,114 +59,54 @@ impl<T : PartialEq + PartialOrd + Clone> ValConstrOrd<T> {
         return ValConstrOrd(joined);
     }
 
-    pub fn equals(&self, other : &ValConstrOrd<T>, range : Range) -> Value {
-        let mut t = false;
-        let mut f = false;
-        for sval in &self.0 {
-            for oval in &other.0 {
-                sval.equals(&oval, &mut t, &mut f);
-                if (t && f) {break;}
-            }
-            if (t && f) {break;}
-        }
-        let mut v = Vec::new();
-        if (t) {v.push(true);}
-        if (f) {v.push(false);}
-        return Value {
-            value : ValueType::Bool(ValConstr(v)),
-            range
-        };
-    }
-
-    pub fn not_equals(&self, other : &ValConstrOrd<T>, range : Range) -> Value {
-        let mut t = false;
-        let mut f = false;
-        for sval in &self.0 {
-            for oval in &other.0 {
-                sval.equals(&oval, &mut t, &mut f);
-                if (t && f) {break;}
-            }
-            if (t && f) {break;}
-        }
-        let mut v = Vec::new();
-        if (t) {v.push(false);}
-        if (f) {v.push(true);}
-        return Value {
-            value : ValueType::Bool(ValConstr(v)),
-            range
-        };
-    }
-
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum ValConstrRange<T : PartialEq + PartialOrd> {
     Exact(T),
     MinInMaxIn(T, T)
 }
 impl<T : PartialEq + PartialOrd> ValConstrRange<T> {
-    pub fn equals(&self, other : &ValConstrRange<T>, t : &mut bool, f : &mut bool) {
-        match (self) {
 
-            Self::Exact(a) => {
-                match (other) {
+}
 
-                    Self::Exact(b) => {
-                        if (a == b) {*t = true;}
-                        else {*f = true;}
-                    },
-
-                    Self::MinInMaxIn(bi, ba) => {
-                        if (bi == a && ba == a) {*t = true;}
-                        else if (bi <= a && ba >= a) {*t = true; *f = true;}
-                        else {*f = true;}
-                    }
-                }
-            },
-
-            Self::MinInMaxIn(ai, aa) => {
-                match (other) {
-
-                    Self::Exact(b) => {
-                        if (ai == b && aa == b) {*t = true;}
-                        else if (ai <= b && aa >= b) {*t = true; *f = true;}
-                        else {*f = true;}
-                    },
-
-                    Self::MinInMaxIn(bi, ba) => {
-                        if (ai == bi && aa == ba) {*t = true;}
-                        else if (
-                               ai <= bi && aa >= bi
-                            || ai <= ba && aa >= ba
-                            || bi <= ai && ba >= ai
-                            || bi <= aa && ba >= aa
-                        ) {*t = true; *f = true;}
-                        else {*f = true;}
-                    }
-
-                }
-            }
-
-        }
-    }
+#[derive(Debug)]
+pub enum ValConstrState<T> {
+    Failed,       // Previous operation failed. Type is known, but possible values are not.
+    Some(Vec<T>), // A list of possible values.
+    Unconstrained // Any value will pass.
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Value {
     pub value : ValueType,
     pub range : Range
 }
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum ValueType {
     Void,
 
     Function(Box<Vec<(String, Value)>>, Box<Option<Value>>, Block),
 
-    Int(ValConstrOrd<ValuePossiblyBigInt>),
-    Float(ValConstrOrd<ValuePossiblyBigFloat>),
+    Int2(ValConstrOrd<i2>),
+    Int4(ValConstrOrd<i4>),
+    Int8(ValConstrOrd<i8>),
+    Int16(ValConstrOrd<i16>),
+    Int32(ValConstrOrd<i32>),
+    Int64(ValConstrOrd<i64>),
+    Int128(ValConstrOrd<i128>),
+    IntBig(ValConstrOrd<BigInt>),
 
-    Bool(ValConstr<bool>)
+    Bool(ValConstr<bool>),
+    Uint2(ValConstrOrd<u2>),
+    Uint4(ValConstrOrd<u4>),
+    Uint8(ValConstrOrd<u8>),
+    Uint16(ValConstrOrd<u16>),
+    Uint32(ValConstrOrd<u32>),
+    Uint64(ValConstrOrd<u64>),
+    Uint128(ValConstrOrd<u128>),
+    UintBig(ValConstrOrd<BigUint>)
 
 }
 
@@ -236,9 +123,9 @@ impl Value {
                 else {String::new()}
             ),
 
-            ValueType::Int(_)   => String::from("int"),
+            ValueType::Int64(_)   => String::from("int64"),
 
-            ValueType::Float(_) => String::from("float"),
+            ValueType::Float64(_) => String::from("float64"),
 
             ValueType::Bool(_)  => String::from("bool")
 
@@ -247,20 +134,20 @@ impl Value {
 
     pub fn matches_type(&self, other : &Value) -> bool {
         return
-            if      (matches!(self.value, ValueType::Void      ) && matches!(other.value, ValueType::Void      )) {true}
-            else if (matches!(self.value, ValueType::Int   (_) ) && matches!(other.value, ValueType::Int   (_) )) {true}
-            else if (matches!(self.value, ValueType::Float (_) ) && matches!(other.value, ValueType::Float (_) )) {true}
-            else if (matches!(self.value, ValueType::Bool  (_) ) && matches!(other.value, ValueType::Bool  (_) )) {true}
+            if      (matches!(self.value, ValueType::Void        ) && matches!(other.value, ValueType::Void        )) {true}
+            else if (matches!(self.value, ValueType::Bool    (_) ) && matches!(other.value, ValueType::Bool    (_) )) {true}
+            else if (matches!(self.value, ValueType::Int64   (_) ) && matches!(other.value, ValueType::Int64   (_) )) {true}
+            else if (matches!(self.value, ValueType::Float64 (_) ) && matches!(other.value, ValueType::Float64 (_) )) {true}
             else {false}
     }
 
     pub fn combine(&self, other : &Value) -> Value {
         let range = Range(min(self.range.0, other.range.0), max(self.range.1, other.range.1));
         return match ((&self.value, &other.value)) {
-            (ValueType::Void      , ValueType::Void      ) => {Value {value : ValueType::Void                  , range}},
-            (ValueType::Int   (l) , ValueType::Int   (r) ) => {Value {value : ValueType::Int   (l.combine(&r)) , range}},
-            (ValueType::Float (l) , ValueType::Float (r) ) => {Value {value : ValueType::Float (l.combine(&r)) , range}},
-            (ValueType::Bool  (l) , ValueType::Bool  (r) ) => {Value {value : ValueType::Bool  (l.combine(&r)) , range}},
+            (ValueType::Void        , ValueType::Void        ) => {Value {value : ValueType::Void                    , range}},
+            (ValueType::Bool    (l) , ValueType::Bool    (r) ) => {Value {value : ValueType::Bool    (l.combine(&r)) , range}},
+            (ValueType::Int64   (l) , ValueType::Int64   (r) ) => {Value {value : ValueType::Int64   (l.combine(&r)) , range}},
+            (ValueType::Float64 (l) , ValueType::Float64 (r) ) => {Value {value : ValueType::Float64 (l.combine(&r)) , range}},
             _ => {panic!("INTERNAL ERROR")}
         };
     }
@@ -268,10 +155,10 @@ impl Value {
     pub fn equals(&self, other : &Value) -> Value {
         let range = Range(min(self.range.0, other.range.0), max(self.range.1, other.range.1));
         return match ((&self.value, &other.value)) {
-            (ValueType::Void      , ValueType::Void      ) => {Value {value : ValueType::Bool(ValConstr(vec![true])), range}},
-            (ValueType::Int   (l) , ValueType::Int   (r) ) => {l.equals(&r, range)},
-            (ValueType::Float (l) , ValueType::Float (r) ) => {l.equals(&r, range)},
-            (ValueType::Bool  (l) , ValueType::Bool  (r) ) => {l.equals(&r, range)},
+            (ValueType::Void        , ValueType::Void        ) => {Value {value : ValueType::Bool(ValConstr(vec![true])), range}},
+            (ValueType::Bool    (l) , ValueType::Bool    (r) ) => {l.equals(&r, range)},
+            (ValueType::Int64   (l) , ValueType::Int64   (r) ) => {l.equals(&r, range)},
+            (ValueType::Float64 (l) , ValueType::Float64 (r) ) => {l.equals(&r, range)},
             _ => {Value {
                 value : ValueType::Bool(ValConstr(vec![false])),
                 range
@@ -282,10 +169,10 @@ impl Value {
     pub fn not_equals(&self, other : &Value) -> Value {
         let range = Range(min(self.range.0, other.range.0), max(self.range.1, other.range.1));
         return match ((&self.value, &other.value)) {
-            (ValueType::Void      , ValueType::Void      ) => {Value {value : ValueType::Bool(ValConstr(vec![true])), range}},
-            (ValueType::Int   (l) , ValueType::Int   (r) ) => {l.not_equals(&r, range)},
-            (ValueType::Float (l) , ValueType::Float (r) ) => {l.not_equals(&r, range)},
-            (ValueType::Bool  (l) , ValueType::Bool  (r) ) => {l.not_equals(&r, range)},
+            (ValueType::Void        , ValueType::Void        ) => {Value {value : ValueType::Bool(ValConstr(vec![true])), range}},
+            (ValueType::Bool    (l) , ValueType::Bool    (r) ) => {l.not_equals(&r, range)},
+            (ValueType::Int64   (l) , ValueType::Int64   (r) ) => {l.not_equals(&r, range)},
+            (ValueType::Float64 (l) , ValueType::Float64 (r) ) => {l.not_equals(&r, range)},
             _ => {Value {
                 value : ValueType::Bool(ValConstr(vec![true])),
                 range
@@ -293,94 +180,15 @@ impl Value {
         };
     }
 
-}
+    pub fn division(&self, other : &Value) -> Value {
+        let range = Range(min(self.range.0, other.range.0), max(self.range.1, other.range.1));
+        return match ((&self.value, &other.value)) {
+            (ValueType::Int64   (l) , ValueType::Int64   (r) ) => {l.division(&r, range)},
+            (ValueType::Float64 (l) , ValueType::Float64 (r) ) => {l.division(&r, range)},
+            _ => {push_error!(InvalidTypeReceived, Always, {
+                range => {"Both sides must be `int` or `float`."}
+            })}
+        };
+    }
 
-
-#[derive(Debug, Clone)]
-pub enum ValuePossiblyBigInt {
-    Small(i64),
-    Big(BigInt)
-}
-impl PartialEq for ValuePossiblyBigInt {
-    fn eq(&self, other : &Self) -> bool {
-        match (self) {
-            Self::Small(a) => {match (other) {
-                Self::Small (b) => {a == b}
-                Self::Big   (b) => {&a.to_bigint().unwrap() == b}
-            }},
-            Self::Big(a) => {match (other) {
-                Self::Small (b) => {a == &b.to_bigint().unwrap()}
-                Self::Big   (b) => {a == b}
-            }}
-        }
-    }
-}
-impl PartialOrd for ValuePossiblyBigInt {
-    fn partial_cmp(&self, other : &Self) -> Option<Ordering> {
-        match (self) {
-            Self::Small(a) => {match (other) {
-                Self::Small (b) => {a.partial_cmp(b)}
-                Self::Big   (b) => {a.to_bigint().unwrap().partial_cmp(b)}
-            }},
-            Self::Big(a) => {match (other) {
-                Self::Small (b) => {a.partial_cmp(&b.to_bigint().unwrap())}
-                Self::Big   (b) => {a.partial_cmp(b)}
-            }}
-        }
-    }
-}
-impl From<&String> for ValuePossiblyBigInt {
-    fn from(value : &String) -> Self {
-        let res = value.parse::<i64>();
-        return if let Ok(res) = res {
-            Self::Small(res)
-        } else {
-            Self::Big(BigInt::from_str(value).unwrap())
-        }
-    }
-}
-
-
-#[derive(Debug, Clone)]
-pub enum ValuePossiblyBigFloat {
-    Small(f64),
-    Big(BigFloat)
-}
-impl PartialEq for ValuePossiblyBigFloat {
-    fn eq(&self, other : &Self) -> bool {
-        match (self) {
-            Self::Small(a) => {match (other) {
-                Self::Small (b) => {a == b}
-                Self::Big   (b) => {&BigFloat::from_f64(*a) == b}
-            }},
-            Self::Big(a) => {match (other) {
-                Self::Small (b) => {a == &BigFloat::from_f64(*b)}
-                Self::Big   (b) => {a == b}
-            }}
-        }
-    }
-}
-impl PartialOrd for ValuePossiblyBigFloat {
-    fn partial_cmp(&self, other : &Self) -> Option<Ordering> {
-        match (self) {
-            Self::Small(a) => {match (other) {
-                Self::Small (b) => {a.partial_cmp(b)}
-                Self::Big   (b) => {BigFloat::from_f64(*a).partial_cmp(b)}
-            }},
-            Self::Big(a) => {match (other) {
-                Self::Small (b) => {a.partial_cmp(&BigFloat::from_f64(*b))}
-                Self::Big   (b) => {a.partial_cmp(b)}
-            }}
-        }
-    }
-}
-impl From<&String> for ValuePossiblyBigFloat {
-    fn from(value : &String) -> Self {
-        let res = value.parse::<f64>();
-        return if let Ok(res) = res {
-            Self::Small(res)
-        } else {
-            Self::Big(BigFloat::parse(value).unwrap())
-        }
-    }
 }

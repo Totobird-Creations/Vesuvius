@@ -20,7 +20,7 @@ enum_named!{NoteOccurance {
 
 // Different warning types, with the formatting functions auto generated.
 enum_named!{WarnType {
-    UnstableRelease,
+    UnstableVersion,
     BlockContents_Called
 }}
 
@@ -28,7 +28,8 @@ enum_named!{WarnType {
 enum_named!{ErrorType {
     DuplicateEntryHeader,
     InvalidTypeReceived,
-    UnknownSymbol
+    UnknownSymbol,
+    _DividedByZero
 }}
 
 

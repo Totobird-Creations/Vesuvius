@@ -1,3 +1,4 @@
+pub mod type_custom;
 pub mod types;
 pub mod verify;
 pub mod notes;
@@ -18,5 +19,5 @@ pub fn reset() {
         *lock = ProgramInfo::new();
         unsafe{&mut scope::SCOPE}.push(Scope::new());
     }
-    notes::push_warn!(UnstableRelease, Always);
+    notes::push_warn!(UnstableVersion, Always);
 }

@@ -160,8 +160,21 @@ impl Expression {
                 todo!()
             },
 
-            ExpressionType::DivisionOperation(_, _) => {
-                todo!()
+            ExpressionType::DivisionOperation(left, right) => {
+                let left_val  = left  .verify();
+                let right_val = right .verify();
+                if (left_val.matches_type(&right_val)) {
+                    left_val.division(&right_val)
+                } else {
+                    push_error!(InvalidTypeReceived, Always, {
+                        left.range  => {"Does not match type of right side."},
+                        right.range => {"Does not match type of left side."}
+                    });
+                    Value {
+                        value : ValueType::Void,
+                        range : self.range
+                    }
+                }
             },
 
             ExpressionType::Atom(atom) => atom.verify()
