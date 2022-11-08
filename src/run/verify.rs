@@ -102,7 +102,7 @@ impl Expression {
                 let left_val  = left  .verify();
                 let right_val = right .verify();
                 if (left_val.matches_type(&right_val)) {
-                    left_val.equals(&right_val)
+                    left_val.eq(&right_val)
                 } else {
                     push_error!(InvalidTypeReceived, Always, {
                         left.range  => {"Does not match type of right side."},
@@ -119,7 +119,7 @@ impl Expression {
                 let left_val  = left  .verify();
                 let right_val = right .verify();
                 if (left_val.matches_type(&right_val)) {
-                    left_val.not_equals(&right_val)
+                    left_val.ne(&right_val)
                 } else {
                     push_error!(InvalidTypeReceived, Always, {
                         left.range  => {"Does not match type of right side."},
@@ -161,20 +161,7 @@ impl Expression {
             },
 
             ExpressionType::DivisionOperation(left, right) => {
-                let left_val  = left  .verify();
-                let right_val = right .verify();
-                if (left_val.matches_type(&right_val)) {
-                    left_val.division(&right_val)
-                } else {
-                    push_error!(InvalidTypeReceived, Always, {
-                        left.range  => {"Does not match type of right side."},
-                        right.range => {"Does not match type of left side."}
-                    });
-                    Value {
-                        value : ValueType::Void,
-                        range : self.range
-                    }
-                }
+                todo!()
             },
 
             ExpressionType::Atom(atom) => atom.verify()
@@ -198,7 +185,7 @@ impl Atom {
                     let (condition, block, range) = &ifs[i];
                     let cond_val                  = condition.verify();
                     if let ValueType::Bool(cond_val) = cond_val.value {
-                        match (cond_val.test(&true)) {
+                        match (cond_val.when_eq_to(&true)) {
 
                             TestResponse::Always => {
                                 push_warn!(BlockContents_Called, Always, {
@@ -302,24 +289,19 @@ impl Literal {
         return Value {
             value : match (&self.lit) {
 
-                LiteralType::Int(val) => ValueType::Int(ValConstrOrd(vec![ValConstrRange::Exact(
-                    ValuePossiblyBigInt::from(val)
-                )])),
+                LiteralType::Int(val) => ValueType::Int64(ValConstrOrd(ValConstrState::Some(vec![ValConstrRange::Exact(
+                    // TODO : Check parse failed.
+                    val.parse().unwrap()
+                )]))),
 
-                LiteralType::Float(int, dec) => ValueType::Float(ValConstrOrd(vec![ValConstrRange::Exact(
-                    ValuePossiblyBigFloat::from(&format!("{}.{}", int, dec))
-                )])),
+                LiteralType::Float(int, dec) => ValueType::Int64(ValConstrOrd(ValConstrState::Some(vec![ValConstrRange::Exact(
+                    // TODO : Check parse failed.
+                    format!("{}.{}", int, dec).parse().unwrap()
+                )]))),
 
                 LiteralType::Identifier(name) => {
-                    if (name == "test_rand_float") {
-                        ValueType::Float(ValConstrOrd(vec![
-                            ValConstrRange::MinInMaxIn(
-                                ValuePossiblyBigFloat::Small(0.0),
-                                ValuePossiblyBigFloat::Small(1.0)
-                            )
-                        ]))
-                    } else if let Some(symbol) = Scope::get_symbol(name) {
-                        symbol.value.value.clone()
+                    if let Some(symbol) = Scope::get_symbol(name) {
+                        symbol.value.value
                     } else {
                         push_error!(UnknownSymbol, Always, {
                             self.range => {"Symbol is not found in current scope."}

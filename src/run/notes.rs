@@ -29,7 +29,7 @@ enum_named!{ErrorType {
     DuplicateEntryHeader,
     InvalidTypeReceived,
     UnknownSymbol,
-    _DividedByZero
+    Bound_Broken
 }}
 
 
@@ -268,6 +268,7 @@ impl NoteType {
 macro_rules! enum_named {
     {$name:ident {$($variant:ident),*}} => {
         #[allow(non_camel_case_types)]
+        #[derive(PartialEq, Eq, Hash)]
         pub enum $name {
             $($variant),*
         }
