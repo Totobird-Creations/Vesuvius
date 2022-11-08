@@ -22,6 +22,7 @@ enum_named!{NoteOccurance {
 
 // Different error types, with the formatting functions auto generated.
 enum_named!{ErrorType {
+    #[doc("Something within the compiler did not function properly.")]
     InternalError,
     UnexpectedToken,
     DuplicateEntryHeader,
@@ -35,6 +36,11 @@ enum_named!{WarnType += ErrorType {
     UnstableVersion,
     BlockContents_Called
 }}
+
+
+pub fn explain(_id : usize) {
+    todo!();
+}
 
 
 pub fn dump<'l, S : Into<&'l String>>(mut line_len : usize, finish : bool, script : S) -> Result<String, String> {
@@ -109,7 +115,14 @@ macro_rules! _push_note {
         let mut lock = COMPILATION_NOTES.write();
         let     note = CompilationNote {
             source : if (cfg!(debug_assertions)) {
-                Some((line!(), column!(), String::from(module_path!())))
+                // If in debug env, Get the location of the call.
+                Some((line!(), column!(),
+                    String::from(module_path!())
+                        // Remove package name and leading colons.
+                        [(env!("CARGO_PKG_NAME").len() + 2)..(module_path!().len())]
+                        .to_owned()
+                    )
+                )
             } else {None},
             occurance : NoteOccurance::$occur,
             note      : $typ,
@@ -307,7 +320,7 @@ impl NoteType {
             },
             if (internal_error) {
                 if (cfg!(debug_assertions)) {
-                    format!("\n \x1b[37m\x1b[2m\x1b[3mThis is not an official release of {}.\n Do not report this on the official bug tracker.\x1b[0m", env!("CARGO_PKG_NAME"))
+                    format!("\n \x1b[37m\x1b[2m\x1b[3mThis is a debug build of {}.\n Do not report this on the bug tracker.\x1b[0m", env!("CARGO_PKG_NAME"))
                 } else {
                     String::from("\n \x1b[37m\x1b[2m\x1b[3mPlease report this at\x1b[0m: \x1b[37m\x1b[2m`\x1b[1mhttps://github.com/Totobird-Creations/Vesuvius/issues/\x1b[0m\x1b[37m\x1b[2m`\x1b[0m.")
                 }
@@ -323,13 +336,13 @@ impl NoteType {
 
 // Auto generate functions for formatting a note type, with an occurance state.
 macro_rules! enum_named {
-    {$name:ident {$($variant:ident),*}} => {
-        $crate::notes::enum_named!{$name /=/ 0 {$($variant),*}}
+    {$name:ident {$($(#[doc($($doc:literal),*)])? $variant:ident),*}} => {
+        $crate::notes::enum_named!{$name /=/ 0 {$($(#[doc($($doc),*)])? $variant),*}}
     };
-    {$name:ident += $addto:ident {$($variant:ident),*}} => {
-        $crate::notes::enum_named!{$name /=/ $addto::MAX {$($variant),*}}
+    {$name:ident += $addto:ident {$($(#[doc($($doc:literal),*)])? $variant:ident),*}} => {
+        $crate::notes::enum_named!{$name /=/ $addto::MAX {$($(#[doc($($doc),*)])? $variant),*}}
     };
-    {$name:ident /=/ $($addto:tt)::+ {$($variant:ident),*}} => {
+    {$name:ident /=/ $($addto:tt)::+ {$($(#[doc($($doc:literal),*)])? $variant:ident),*}} => {
         #[allow(non_camel_case_types)]
         #[derive(Clone, PartialEq, Eq, Hash)]
         pub enum $name {
@@ -358,6 +371,12 @@ macro_rules! enum_named {
                 return match (self) {
                     $(Self::$variant => {stringify!($variant)}),*
                 };
+            }
+            // The doc of the variant.
+            fn doc(&self) -> Vec<String> {
+                return match (self) {
+                    $(Self::$variant => vec![$($(String::from($doc)),*)?]),*
+                }
             }
             // Steps:
             // - Replace `_` with a space and the occurance state.

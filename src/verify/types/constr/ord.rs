@@ -37,8 +37,9 @@ impl<T : TryOps<T> + Clone> ValConstrOrd<T> {
     )
         where F : Fn(&ValConstrRange<T>, &ValConstrRange<T>) -> Result<TestResponse, (Vec<WarnType>, Vec<ErrorType>)>
     {
-        // TODO
-        todo!();
+        push_error!(InternalError, Always, {
+            Range(0, 0) => {"Todo : ord._op_bool_base"}
+        });
     }
 
     pub fn op_bool<F>(&self, _value : &T, _op : F)
