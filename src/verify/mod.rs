@@ -1,11 +1,13 @@
 pub mod types;
-pub mod notes;
 pub mod scope;
 pub mod verify;
 
-use scope::{
-    ProgramInfo,
-    Scope
+use crate::{
+    notes,
+    verify::scope::{
+        ProgramInfo,
+        Scope
+    }
 };
 
 

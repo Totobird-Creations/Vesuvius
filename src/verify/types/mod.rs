@@ -10,7 +10,7 @@ use paste::paste;
 
 use crate::{
     parse::node::*,
-    run::types::{
+    verify::types::{
         constr::{
             eq::ValConstr,
             ord::ValConstrOrd,
@@ -269,8 +269,8 @@ macro_rules! match_lr {
     }} => {match (($left, $right)) {
         $(
             (
-                $($variant)::+$(($($crate::run::types::_match_lr_a!(l => $arg $(/ $arg2)?)),*))?,
-                $($variant)::+$(($($crate::run::types::_match_lr_a!(r => $arg $(/ $arg2)?)),*))?
+                $($variant)::+$(($($crate::verify::types::_match_lr_a!(l => $arg $(/ $arg2)?)),*))?,
+                $($variant)::+$(($($crate::verify::types::_match_lr_a!(r => $arg $(/ $arg2)?)),*))?
             )
             => {$expr}
         ),*
@@ -289,9 +289,9 @@ use _match_lr_a;
 
 
 macro_rules! op_bool_fn {
-    {$name:ident} => {$crate::run::types::paste!{
+    {$name:ident} => {$crate::verify::types::paste!{
         pub fn $name(&self, value : &T) -> TestResponse {
-            self.op_bool(value, |a, b| $crate::run::types::paste!{a.[<try_ $name>](b)})
+            self.op_bool(value, |a, b| $crate::verify::types::paste!{a.[<try_ $name>](b)})
         }
         pub fn [<$name _other>](&self, other : &Self) -> TestResponse {
             self.op_bool_other(other, |a, b| a.[<try_ $name>](b))

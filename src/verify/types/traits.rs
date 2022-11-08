@@ -4,7 +4,7 @@ use num_bigint::{
 };
 use num_bigfloat::BigFloat;
 
-use crate::run::notes::{
+use crate::verify::notes::{
     WarnType,
     ErrorType
 };

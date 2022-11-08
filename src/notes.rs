@@ -8,6 +8,8 @@ use crate::parse::node::Range;
 const VERTICAL_CUTOFF : usize = 3;
 
 #[dynamic]
+pub(crate) static mut COMPILATION_NOTES_DUMPED : Vec<CompilationNote> = Vec::new();
+#[dynamic]
 pub(crate) static mut COMPILATION_NOTES : Vec<CompilationNote> = Vec::new();
 
 
@@ -25,7 +27,10 @@ enum_named!{WarnType {
 }}
 
 // Different error types, with the formatting functions auto generated.
-enum_named!{ErrorType {
+enum_named!{ErrorType += WarnType {
+    InternalError,
+    InternalTodo,
+    UnexpectedToken,
     DuplicateEntryHeader,
     InvalidTypeReceived,
     UnknownSymbol,
@@ -33,25 +38,33 @@ enum_named!{ErrorType {
 }}
 
 
-pub fn dump<'l, S : Into<&'l String>>(script : S) {
-    let lock = COMPILATION_NOTES.read();
+pub fn dump<'l, S : Into<&'l String>>(mut line_len : usize, finish : bool, script : S) -> Result<String, String> {
+    let mut final_text = String::new();
+
+    let mut notes        = COMPILATION_NOTES.write();
+    let mut notes_dumped = COMPILATION_NOTES_DUMPED.write();
     let mut counts = (
         0, // Warn
         0  // Error
     );
-    let mut line_len = 0;
     let     script   = script.into();
     // For each note, print a line, and the note.
-    for note in lock.iter() {
-        let res  = note.fmt(script, &mut counts);
-        println!("\x1b[90m{}\x1b[0m\n{}", "─".repeat(max(res.1, line_len)), res.0);
+    for note in notes.iter() {
+        let res = note.fmt(script, &mut counts);
+        final_text += &format!("\x1b[90m{}\x1b[0m\n{}\n", "─".repeat(max(res.1, line_len)), res.0);
         line_len = res.1;
     }
+    for note_dumped in notes_dumped.iter() {
+        match (note_dumped.note) {
+            NoteType::Warn  (_) => {counts.0 += 1},
+            NoteType::Error (_) => {counts.0 += 1}
+        }
+    }
     // Print a line after the last note.
-    println!("\x1b[90m{}\x1b[0m", "─".repeat(line_len));
+    final_text += &format!("\x1b[90m{}\x1b[0m\n", "─".repeat(line_len));
     // Print finished or failed, with the number of each note type.
-    {
-        let (warns, errors) = counts;
+    let (warns, errors) = counts;
+    if (finish || errors > 0) {
         // Finished or failed.
         let mut finished = if (errors > 0) {
             String::from("\x1b[31m\x1b[1mFailed\x1b[0m")
@@ -78,8 +91,14 @@ pub fn dump<'l, S : Into<&'l String>>(script : S) {
         }
         finished += ".";
         // Print final message.
-        println!("\n{}", finished);
+        final_text += &format!("\n{}\n", finished);
     }
+    notes_dumped.append(&mut notes);
+    return if (errors > 0) {
+        Err(final_text)
+    } else {
+        Ok(final_text)
+    };
 }
 
 
@@ -87,7 +106,7 @@ pub fn dump<'l, S : Into<&'l String>>(script : S) {
 #[allow(unused)]
 macro_rules! _push_note {
     ($typ:expr, $occur:ident, {$($range:expr => {$($text:tt)+}),*}) => {{
-        use $crate::run::notes::*;
+        use $crate::notes::*;
         let mut lock = COMPILATION_NOTES.write();
         let     note = CompilationNote {
             source : if (cfg!(debug_assertions)) {
@@ -106,9 +125,9 @@ pub(crate) use _push_note;
 // Errors will prevent compilation.
 #[allow(unused)]
 macro_rules! push_error {
-    ($typ:ident, $occur:ident) => {$crate::run::notes::push_error!($typ, $occur, {})};
+    ($typ:ident, $occur:ident) => {$crate::notes::push_error!($typ, $occur, {})};
     ($typ:ident, $occur:ident, {$($range:expr => {$($text:tt)+}),*}) => {{
-        $crate::run::notes::_push_note!(NoteType::Error(ErrorType::$typ), $occur, {$($range => {$($text)+}),*});
+        $crate::notes::_push_note!(NoteType::Error(ErrorType::$typ), $occur, {$($range => {$($text)+}),*});
     }}
 }
 pub(crate) use push_error;
@@ -117,9 +136,9 @@ pub(crate) use push_error;
 // Warnings will not prevent compilation, but will be corrected by the verifier.
 #[allow(unused)]
 macro_rules! push_warn {
-    ($typ:ident, $occur:ident) => {$crate::run::notes::push_warn!($typ, $occur, {})};
+    ($typ:ident, $occur:ident) => {$crate::notes::push_warn!($typ, $occur, {})};
     ($typ:ident, $occur:ident, {$($range:expr => {$($text:tt)+}),*}) => {{
-        $crate::run::notes::_push_note!(NoteType::Warn(WarnType::$typ), $occur, {$($range => {$($text)+}),*});
+        $crate::notes::_push_note!(NoteType::Warn(WarnType::$typ), $occur, {$($range => {$($text)+}),*});
     }}
 }
 pub(crate) use push_warn;
@@ -161,6 +180,12 @@ impl NoteType {
             Self::Error (_) => "\x1b[31m"
         }
     }
+    fn clp(&self) -> &'static str {
+        return match (self) {
+            Self::Warn  (_) => "\x1b[93m",
+            Self::Error (_) => "\x1b[91m"
+        }
+    }
     // Return the title of this note level.
     fn pf(&self) -> &'static str {
         return match (self) {
@@ -181,16 +206,26 @@ impl NoteType {
                 error.fmt(occurance)
             }
         };
+        let (id, id_len) = match (self) {
+            Self::Warn  (warn)  => (warn.id().to_string()  , warn.id_len()  ),
+            Self::Error (error) => (error.id().to_string() , error.id_len() )
+        };
         // Get the unformatted note title and get the length. This is used to make the note separators the correct length.
-        let title_len = format!("[{}]: {}.",
+        let title_len = format!("[{}({})]: {}.",
             self.pf(),
+            " ".repeat(id_len),
             title
         ).len();
         // Get the formatted note title.
-        let title = format!("{}[{}]\x1b[0m: {}\x1b[1m{}\x1b[0m.",
+        let title = format!("{}[{}\x1b[2m(\x1b[0m{}{}\x1b[1m{}\x1b[0m{}\x1b[2m)\x1b[0m{}]\x1b[0m: {}\x1b[1m{}\x1b[0m.",
             self.cl(),
             self.pf(),
+            self.clp(),
+            "0".repeat(id_len - if (id == "0") {0} else {id.len()}),
+            if (id == "0") {String::new()} else {id},
             self.cl(),
+            self.cl(),
+            self.clp(),
             title
         );
         // Get the entire note.
@@ -282,8 +317,20 @@ impl NoteType {
 
 
 // Auto generate functions for formatting a note type, with an occurance state.
+// Formatting Steps:
+// - Replace `_` with a space and the occurance state.
+// - Insert space before uppercase letters.
+// - Replace uppercase letters with their lowercase counterpart.
+// - Trim spaces off of the edges of the string.
+// - Replace first letter with uppercase counterpart.
 macro_rules! enum_named {
     {$name:ident {$($variant:ident),*}} => {
+        $crate::notes::enum_named!{$name /=/ 0 {$($variant),*}}
+    };
+    {$name:ident += $addto:ident {$($variant:ident),*}} => {
+        $crate::notes::enum_named!{$name /=/ $addto::MAX {$($variant),*}}
+    };
+    {$name:ident /=/ $($addto:tt)::+ {$($variant:ident),*}} => {
         #[allow(non_camel_case_types)]
         #[derive(Clone, PartialEq, Eq, Hash)]
         pub enum $name {
@@ -291,10 +338,23 @@ macro_rules! enum_named {
         }
         #[allow(unused)]
         impl $name {
+            const MAX : u32 = {
+                let mut i = $($addto)::+;
+                $({Self::$variant}; i += 1;)*
+                i
+            };
+            fn id(&self) -> u32 {
+                let mut i = $($addto)::+;
+                $(if let Self::$variant = self {return i;} else {i += 1;})*
+                panic!("INTERNAL ERROR");
+            }
+            fn id_len(&self) -> usize {
+                return max((Self::MAX - 1).to_string().len(), 5);
+            }
             fn name<'l>(&self) -> &'l str {
-                match (self) {
+                return match (self) {
                     $(Self::$variant => {stringify!($variant)}),*
-                }
+                };
             }
             fn fmt(&self, occurance : &NoteOccurance) -> String {
                 return match (self) {
@@ -317,6 +377,6 @@ macro_rules! enum_named {
                 };
             }
         }
-    }
+    };
 }
 use enum_named;

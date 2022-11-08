@@ -1,10 +1,10 @@
 use crate::{
+    notes::{
+        push_error,
+        push_warn
+    },
     parse::node::*,
-    run::{
-        notes::{
-            push_error,
-            push_warn
-        },
+    verify::{
         types::{
             Value,
             ValueType,
