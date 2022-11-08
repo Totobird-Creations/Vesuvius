@@ -1,4 +1,4 @@
-#![allow(unused_parens)]
+#![allow(unused_parens, non_snake_case)]
 
 pub mod notes;
 pub mod parse;
@@ -34,7 +34,9 @@ fn main() {
 
     attempt!{
         "Compiling";
-        &script => notes::push_error!(InternalTodo, Always)
+        &script => notes::push_error!(InternalError, Always, {
+            parse::node::Range(0, 0) => {"Todo : Compile"}
+        })
     };
 
 }
@@ -48,7 +50,7 @@ macro_rules! attempt {
         $crate::attempt!{$title; false $script => $expr}
     };
     {$title:expr; $fin:ident $script:expr => $expr:expr} => {{
-        printw!("\n \x1b[36m=>\x1b[0m \x1b[96m{}\x1b[0m\x1b[36m\x1b[2m...\x1b[0m", $title);
+        printw!("\n \x1b[37m\x1b[2m=>\x1b[0m \x1b[96m{}\x1b[0m\x1b[36m\x1b[2m...\x1b[0m", $title);
         let v = $expr;
         match ($crate::notes::dump(4 + $title.len() + 13, $fin, $script)) {
             Ok(text) => {

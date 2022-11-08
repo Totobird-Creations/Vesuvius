@@ -20,21 +20,20 @@ enum_named!{NoteOccurance {
     Never
 }}
 
-// Different warning types, with the formatting functions auto generated.
-enum_named!{WarnType {
-    UnstableVersion,
-    BlockContents_Called
-}}
-
 // Different error types, with the formatting functions auto generated.
-enum_named!{ErrorType += WarnType {
+enum_named!{ErrorType {
     InternalError,
-    InternalTodo,
     UnexpectedToken,
     DuplicateEntryHeader,
     InvalidTypeReceived,
     UnknownSymbol,
     Bound_Broken
+}}
+
+// Different warning types, with the formatting functions auto generated.
+enum_named!{WarnType += ErrorType {
+    UnstableVersion,
+    BlockContents_Called
 }}
 
 
@@ -91,7 +90,7 @@ pub fn dump<'l, S : Into<&'l String>>(mut line_len : usize, finish : bool, scrip
         }
         finished += ".";
         // Print final message.
-        final_text += &format!("\n{}\n", finished);
+        final_text += &format!("\n \x1b[37m\x1b[2m=>\x1b[0m {}\n", finished);
     }
     notes_dumped.append(&mut notes);
     return if (errors > 0) {
@@ -156,7 +155,7 @@ impl CompilationNote {
         return (
             format!("{}{}",
                 if let Some((line, col, file)) = &self.source {
-                    format!("\x1b[37m\x1b[2m\x1b[3mInternal source:\x1b[0m \x1b[37m\x1b[2m`\x1b[0m\x1b[37m\x1b[1m{}\x1b[1m\x1b[0m\x1b[37m\x1b[2m`\x1b[0m \x1b[37m\x1b[1m{}\x1b[0m\x1b[97m\x1b[2m:\x1b[0m\x1b[37m\x1b[1m{}\x1b[0m\n",
+                    format!(" \x1b[37m\x1b[2m\x1b[3mInternal source:\x1b[0m \x1b[37m\x1b[2m`\x1b[0m\x1b[37m\x1b[1m{}\x1b[1m\x1b[0m\x1b[37m\x1b[2m`\x1b[0m \x1b[37m\x1b[1m{}\x1b[0m\x1b[97m\x1b[2m:\x1b[0m\x1b[37m\x1b[1m{}\x1b[0m\n",
                         file,
                         line, col
                     )
@@ -170,16 +169,17 @@ impl CompilationNote {
 
 pub enum NoteType {
     Warn(WarnType),  // User did something that is unrecommended.
-    Error(ErrorType) // User did something that is forbidden.
+    Error(ErrorType) // User did something that is forbidden, or internal error.
 }
 impl NoteType {
-    // Return the ansi escape colour code of this note level.
+    // Return the ansi escape colour code of this note type.
     fn cl(&self) -> &'static str {
         return match (self) {
             Self::Warn  (_) => "\x1b[33m",
             Self::Error (_) => "\x1b[31m"
         }
     }
+    // Get the brightened ansi escape colour code of this note type.
     fn clp(&self) -> &'static str {
         return match (self) {
             Self::Warn  (_) => "\x1b[93m",
@@ -195,29 +195,25 @@ impl NoteType {
     }
     // Format the note.
     fn fmt(&self, script : &String, occurance : &NoteOccurance, details : &Vec<(Range, String)>, (warns, errors) : &mut (u64, u64)) -> (String, usize) {
-        // Get the note type name.
-        let title = match (self) {
+        // Get the note type info.
+        let (title, id, id_len, internal_error) = match (self) {
             Self::Warn(warn) => {
                 *warns += 1;
-                warn.fmt(occurance)
+                (warn.fmt(occurance), warn.id(), warn.id_len(), false)
             },
             Self::Error(error) => {
                 *errors += 1;
-                error.fmt(occurance)
+                (error.fmt(occurance), error.id(), error.id_len(), matches!(error, ErrorType::InternalError))
             }
         };
-        let (id, id_len) = match (self) {
-            Self::Warn  (warn)  => (warn.id().to_string()  , warn.id_len()  ),
-            Self::Error (error) => (error.id().to_string() , error.id_len() )
-        };
         // Get the unformatted note title and get the length. This is used to make the note separators the correct length.
-        let title_len = format!("[{}({})]: {}.",
+        let title_len = format!(" [ {}({}) ] : {}.",
             self.pf(),
             " ".repeat(id_len),
             title
         ).len();
         // Get the formatted note title.
-        let title = format!("{}[{}\x1b[2m(\x1b[0m{}{}\x1b[1m{}\x1b[0m{}\x1b[2m)\x1b[0m{}]\x1b[0m: {}\x1b[1m{}\x1b[0m.",
+        let title = format!(" {}[ {}\x1b[2m(\x1b[0m{}{}\x1b[1m{}\x1b[0m{}\x1b[2m)\x1b[0m {}]\x1b[0m : {}\x1b[1m{}\x1b[0m.",
             self.cl(),
             self.pf(),
             self.clp(),
@@ -229,7 +225,7 @@ impl NoteType {
             title
         );
         // Get the entire note.
-        let text = format!("{}{}",
+        let text = format!("{}{}{}",
             title,
             if (details.len() > 0) {
                 // Add details.
@@ -257,7 +253,7 @@ impl NoteType {
                     // Format the detail.
                     format!("\n{}{}{}{}\n{}",
                         // Location of the detail.
-                        format!("  \x1b[90m┌\x1b[0m `\x1b[94m{}\x1b[0m` \x1b[94m\x1b[1m{}\x1b[0m\x1b[34m:\x1b[94m\x1b[1m{}\x1b[0m\x1b[34m..\x1b[0m\x1b[94m\x1b[1m{}\x1b[0m\x1b[34m:\x1b[0m\x1b[94m\x1b[1m{}\x1b[0m",
+                        format!("   \x1b[90m┌\x1b[0m `\x1b[94m{}\x1b[0m` \x1b[94m\x1b[1m{}\x1b[0m\x1b[34m:\x1b[94m\x1b[1m{}\x1b[0m\x1b[34m..\x1b[0m\x1b[94m\x1b[1m{}\x1b[0m\x1b[34m:\x1b[0m\x1b[94m\x1b[1m{}\x1b[0m",
                             "todo_filename.vsv",
                             range.0.0,
                             range.0.1,
@@ -266,7 +262,7 @@ impl NoteType {
                         ),
                         // If the detail is multi line, add a marker showing the start of the detail, with a line to eol.
                         if (lines.len() > 1) {
-                            format!("\n  \x1b[90m│ {} │\x1b[0m\x1b[95m{}┌{}\x1b[0m",
+                            format!("\n   \x1b[90m│ {} │\x1b[0m\x1b[95m\x1b[1m{}┌{}\x1b[0m",
                                 " ".repeat(lines_pad),
                                 " ".repeat(range.0.1),
                                 "─".repeat(lines[0].1.len() - range.0.1)
@@ -274,7 +270,7 @@ impl NoteType {
                         } else {String::new()},
                         // Add the code line.
                         lines.iter().map(|(l, line)| {
-                            format!("\n  \x1b[90m│\x1b[0m \x1b[94m\x1b[2m{: >lines_pad$}\x1b[0m \x1b[90m│\x1b[0m {}{}",
+                            format!("\n   \x1b[90m│\x1b[0m \x1b[94m\x1b[2m{: >lines_pad$}\x1b[0m \x1b[90m│\x1b[0m {}{}",
                                 l, line,
                                 // If some of the lines were cut off, add an empty line and some dots.
                                 if let Some(vert_cutoff) = vert_cutoff {
@@ -286,7 +282,7 @@ impl NoteType {
                                 } else {String::new()}
                             )
                         }).collect::<Vec<_>>().join(""),
-                        format!("\n  \x1b[90m│ {} │\x1b[0m\x1b[95m{}\x1b[0m",
+                        format!("\n   \x1b[90m│ {} │\x1b[0m\x1b[95m\x1b[1m{}\x1b[0m",
                             " ".repeat(lines_pad),
                             // If the detail is single line, add a marker showing the start and end of the detail.
                             if (lines.len() <= 1) {
@@ -302,12 +298,21 @@ impl NoteType {
                             } else {format!(" {}┘", "─".repeat(range.1.1 - 2))}
                         ),
                         // The detail message.
-                        format!("  \x1b[90m└─{}─┴──\x1b[0m {}{}\x1b[0m", "─".repeat(lines_pad), self.cl(), detail.1)
+                        format!("   \x1b[90m└─{}─┴──\x1b[0m {}{}\x1b[0m", "─".repeat(lines_pad), self.cl(), detail.1)
                     )
                 }).collect::<Vec<_>>().join("")
             } else {
                 // If no details were provided, mention it.
-                String::from("\n  \x1b[90m\x1b[3mNo other details provided.\x1b[0m")
+                String::from("\n \x1b[37m\x1b[2m\x1b[3mNo other details provided.\x1b[0m")
+            },
+            if (internal_error) {
+                if (cfg!(debug_assertions)) {
+                    format!("\n \x1b[37m\x1b[2m\x1b[3mThis is not an official release of {}.\n Do not report this on the official bug tracker.\x1b[0m", env!("CARGO_PKG_NAME"))
+                } else {
+                    String::from("\n \x1b[37m\x1b[2m\x1b[3mPlease report this at\x1b[0m: \x1b[37m\x1b[2m`\x1b[1mhttps://github.com/Totobird-Creations/Vesuvius/issues/\x1b[0m\x1b[37m\x1b[2m`\x1b[0m.")
+                }
+            } else {
+                String::new()
             }
         );
         return (text, title_len);
@@ -317,12 +322,6 @@ impl NoteType {
 
 
 // Auto generate functions for formatting a note type, with an occurance state.
-// Formatting Steps:
-// - Replace `_` with a space and the occurance state.
-// - Insert space before uppercase letters.
-// - Replace uppercase letters with their lowercase counterpart.
-// - Trim spaces off of the edges of the string.
-// - Replace first letter with uppercase counterpart.
 macro_rules! enum_named {
     {$name:ident {$($variant:ident),*}} => {
         $crate::notes::enum_named!{$name /=/ 0 {$($variant),*}}
@@ -338,24 +337,34 @@ macro_rules! enum_named {
         }
         #[allow(unused)]
         impl $name {
+            // One higher than the id of the last variant in this enum.
             const MAX : u32 = {
                 let mut i = $($addto)::+;
                 $({Self::$variant}; i += 1;)*
                 i
             };
-            fn id(&self) -> u32 {
+            // The id of the variant.
+            fn id(&self) -> String {
                 let mut i = $($addto)::+;
-                $(if let Self::$variant = self {return i;} else {i += 1;})*
+                $(if let Self::$variant = self {return format!("{:X}", i);} else {i += 1;})*
                 panic!("INTERNAL ERROR");
             }
+            // The number of 0 to pad the id by.
             fn id_len(&self) -> usize {
-                return max((Self::MAX - 1).to_string().len(), 5);
+                return max((Self::MAX - 1).to_string().len(), 4);
             }
+            // The variant name, as it was given in the declaration.
             fn name<'l>(&self) -> &'l str {
                 return match (self) {
                     $(Self::$variant => {stringify!($variant)}),*
                 };
             }
+            // Steps:
+            // - Replace `_` with a space and the occurance state.
+            // - Insert space before uppercase letters.
+            // - Replace uppercase letters with their lowercase counterpart.
+            // - Trim spaces off of the edges of the string.
+            // - Replace first letter with uppercase counterpart.
             fn fmt(&self, occurance : &NoteOccurance) -> String {
                 return match (self) {
                     $(Self::$variant => {

@@ -1,18 +1,21 @@
 use std::collections::HashMap;
 
-use crate::verify::{
-    notes::{
-        WarnType,
-        ErrorType,
-        push_error
-    },
-    types::{
-        constr::{
-            ValConstrState,
-            TestResponse
+use crate::{
+    parse::node::Range,
+    verify::{
+        notes::{
+            WarnType,
+            ErrorType,
+            push_error
         },
-        traits::TryOps,
-        op_bool_fn
+        types::{
+            constr::{
+                ValConstrState,
+                TestResponse
+            },
+            traits::TryOps,
+            op_bool_fn
+        }
     }
 };
 
@@ -42,7 +45,9 @@ impl<T : TryOps<T> + Clone> ValConstrOrd<T> {
         -> TestResponse
         where F : Fn(&ValConstrRange<T>, &ValConstrRange<T>) -> Result<TestResponse, (Vec<WarnType>, Vec<ErrorType>)>
     {
-        push_error!(InternalTodo, Always);
+        push_error!(InternalError, Always, {
+            Range(0, 0) => {"Todo : ord.op_bool"}
+        });
         return TestResponse::Failed;
     }
 
@@ -50,7 +55,9 @@ impl<T : TryOps<T> + Clone> ValConstrOrd<T> {
         -> TestResponse
         where F : Fn(&ValConstrRange<T>, &ValConstrRange<T>) -> Result<TestResponse, (Vec<WarnType>, Vec<ErrorType>)>
     {
-        push_error!(InternalTodo, Always);
+        push_error!(InternalError, Always, {
+            Range(0, 0) => {"Todo : ord.op_bool_other"}
+        });
         return TestResponse::Failed;
     }
 

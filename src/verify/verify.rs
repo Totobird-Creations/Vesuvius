@@ -317,7 +317,9 @@ impl Literal {
                 )]))),
 
                 LiteralType::Identifier(name) => {
-                    if let Some(symbol) = Scope::get_symbol(name) {
+                    if (name == "rand_bool") {
+                        ValueType::Bool(ValConstr(ValConstrState::Some(vec![true])))
+                    } else if let Some(symbol) = Scope::get_symbol(name) {
                         // TODO : Movable
                         symbol.value.value.clone()
                     } else {
