@@ -1,8 +1,8 @@
-pub mod type_custom;
 pub mod types;
-pub mod verify;
 pub mod notes;
 pub mod scope;
+pub mod verify;
+
 use scope::{
     ProgramInfo,
     Scope

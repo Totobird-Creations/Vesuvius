@@ -1,10 +1,14 @@
-use std::collections::HashMap;
-use std::cell::UnsafeCell;
+use std::{
+    collections::HashMap,
+    cell::UnsafeCell
+};
 
 use static_init::dynamic;
 
-use crate::parse::node::Range;
-use crate::run::types::Value;
+use crate::{
+    parse::node::Range,
+    run::types::Value
+};
 
 
 #[dynamic]

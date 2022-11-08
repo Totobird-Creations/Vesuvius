@@ -1,12 +1,29 @@
-use crate::parse::node::*;
-use crate::run::types::*;
-use crate::run::notes::{
-    push_error,
-    push_warn
-};
-use crate::run::scope::{
-    self,
-    *
+use crate::{
+    parse::node::*,
+    run::{
+        notes::{
+            push_error,
+            push_warn
+        },
+        types::{
+            Value,
+            ValueType,
+            constr::{
+                TestResponse,
+                eq::ValConstr,
+                ord::{
+                    ValConstrOrd,
+                    ValConstrRange
+                },
+                ValConstrState
+            }
+        },
+        scope::{
+            self,
+            Scope,
+            Symbol
+        }
+    }
 };
 
 
@@ -102,14 +119,14 @@ impl Expression {
                 let left_val  = left  .verify();
                 let right_val = right .verify();
                 if (left_val.matches_type(&right_val)) {
-                    left_val.eq(&right_val)
+                    Value::bool_from(left_val.eq(&right_val), Range(left_val.range.0, right_val.range.1))
                 } else {
                     push_error!(InvalidTypeReceived, Always, {
                         left.range  => {"Does not match type of right side."},
                         right.range => {"Does not match type of left side."}
                     });
                     Value {
-                        value : ValueType::Bool(ValConstr::failed()),
+                        value : ValueType::Bool(ValConstr(ValConstrState::Failed)),
                         range : self.range
                     }
                 }
@@ -119,14 +136,14 @@ impl Expression {
                 let left_val  = left  .verify();
                 let right_val = right .verify();
                 if (left_val.matches_type(&right_val)) {
-                    left_val.ne(&right_val)
+                    Value::bool_from(left_val.ne(&right_val), Range(left_val.range.0, right_val.range.1))
                 } else {
                     push_error!(InvalidTypeReceived, Always, {
                         left.range  => {"Does not match type of right side."},
                         right.range => {"Does not match type of left side."}
                     });
                     Value {
-                        value : ValueType::Bool(ValConstr::failed()),
+                        value : ValueType::Bool(ValConstr(ValConstrState::Failed)),
                         range : self.range
                     }
                 }
@@ -185,7 +202,7 @@ impl Atom {
                     let (condition, block, range) = &ifs[i];
                     let cond_val                  = condition.verify();
                     if let ValueType::Bool(cond_val) = cond_val.value {
-                        match (cond_val.when_eq_to(&true)) {
+                        match (cond_val.eq(&true)) {
 
                             TestResponse::Always => {
                                 push_warn!(BlockContents_Called, Always, {

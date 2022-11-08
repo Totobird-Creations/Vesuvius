@@ -1,11 +1,11 @@
-use crate::run::notes::{
-    WarnType,
-    ErrorType
-};
-
 use num_bigint::{
     BigInt,
     BigUint
+};
+
+use crate::run::notes::{
+    WarnType,
+    ErrorType
 };
 
 
