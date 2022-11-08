@@ -83,20 +83,32 @@ pub fn dump<'l, S : Into<&'l String>>(script : S) {
 }
 
 
+// Add a note to be printed after verification is complete.
+#[allow(unused)]
+macro_rules! _push_note {
+    ($typ:expr, $occur:ident, {$($range:expr => {$($text:tt)+}),*}) => {{
+        use $crate::run::notes::*;
+        let mut lock = COMPILATION_NOTES.write();
+        let     note = CompilationNote {
+            source : if (cfg!(debug_assertions)) {
+                Some((line!(), column!(), String::from(module_path!())))
+            } else {None},
+            occurance : NoteOccurance::$occur,
+            note      : $typ,
+            details   : vec![$(($range, format!($($text)+))),*]
+        };
+        lock.push(note);
+    }}
+}
+pub(crate) use _push_note;
+
 // Add an error to be printed after verification is complete.
 // Errors will prevent compilation.
 #[allow(unused)]
 macro_rules! push_error {
     ($typ:ident, $occur:ident) => {$crate::run::notes::push_error!($typ, $occur, {})};
     ($typ:ident, $occur:ident, {$($range:expr => {$($text:tt)+}),*}) => {{
-        use $crate::run::notes::*;
-        let mut lock = COMPILATION_NOTES.write();
-        let     note = CompilationNote {
-            occurance : NoteOccurance::$occur,
-            note      : NoteType::Error(ErrorType::$typ),
-            details   : vec![$(($range, format!($($text)+))),*]
-        };
-        lock.push(note);
+        $crate::run::notes::_push_note!(NoteType::Error(ErrorType::$typ), $occur, {$($range => {$($text)+}),*});
     }}
 }
 pub(crate) use push_error;
@@ -107,20 +119,14 @@ pub(crate) use push_error;
 macro_rules! push_warn {
     ($typ:ident, $occur:ident) => {$crate::run::notes::push_warn!($typ, $occur, {})};
     ($typ:ident, $occur:ident, {$($range:expr => {$($text:tt)+}),*}) => {{
-        use $crate::run::notes::*;
-        let mut lock = COMPILATION_NOTES.write();
-        let     note = CompilationNote {
-            occurance : NoteOccurance::$occur,
-            note      : NoteType::Warn(WarnType::$typ),
-            details   : vec![$(($range, format!($($text)+))),*]
-        };
-        lock.push(note);
+        $crate::run::notes::_push_note!(NoteType::Warn(WarnType::$typ), $occur, {$($range => {$($text)+}),*});
     }}
 }
 pub(crate) use push_warn;
 
 
 pub struct CompilationNote {
+    pub source    : Option<(u32, u32, String)>,
     pub occurance : NoteOccurance,
     pub note      : NoteType,
     pub details   : Vec<(Range, String)>
@@ -128,7 +134,18 @@ pub struct CompilationNote {
 impl CompilationNote {
     fn fmt(&self, script : &String, counts : &mut (u64, u64)) -> (String, usize) {
         let text = self.note.fmt(script, &self.occurance, &self.details, counts);
-        return (format!("{}", text.0), text.1);
+        return (
+            format!("{}{}",
+                if let Some((line, col, file)) = &self.source {
+                    format!("\x1b[37m\x1b[2m\x1b[3mInternal source:\x1b[0m \x1b[37m\x1b[2m`\x1b[0m\x1b[37m\x1b[1m{}\x1b[1m\x1b[0m\x1b[37m\x1b[2m`\x1b[0m \x1b[37m\x1b[1m{}\x1b[0m\x1b[97m\x1b[2m:\x1b[0m\x1b[37m\x1b[1m{}\x1b[0m\n",
+                        file,
+                        line, col
+                    )
+                } else {String::new()},
+                text.0
+            ),
+            text.1
+        );
     }
 }
 
@@ -268,7 +285,7 @@ impl NoteType {
 macro_rules! enum_named {
     {$name:ident {$($variant:ident),*}} => {
         #[allow(non_camel_case_types)]
-        #[derive(PartialEq, Eq, Hash)]
+        #[derive(Clone, PartialEq, Eq, Hash)]
         pub enum $name {
             $($variant),*
         }

@@ -33,21 +33,21 @@ impl<T : TryOps<T> + Clone> ValConstrOrd<T> {
     )
         where F : Fn(&T, &T) -> Result<bool, (Vec<WarnType>, Vec<ErrorType>)>
     {
-        compile_error!("TODO")
+        todo!();
     }
 
     pub fn op_bool<F>(&self, other : &T, op : F)
         -> TestResponse
         where F : Fn(&T, &T) -> Result<bool, (Vec<WarnType>, Vec<ErrorType>)>
     {
-        compile_error!("TODO")
+        todo!();
     }
 
     pub fn op_bool_other<F>(&self, value : &Self, op : F)
         -> TestResponse
         where F : Fn(&T, &T) -> Result<bool, (Vec<WarnType>, Vec<ErrorType>)>
     {
-        compile_error!("TODO")
+        todo!();
     }
 
     op_bool_fn!{eq}

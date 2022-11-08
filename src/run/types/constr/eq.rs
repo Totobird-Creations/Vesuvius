@@ -26,7 +26,7 @@ impl<T : TryOps<T> + Clone> ValConstr<T> {
 
     pub fn _op_bool_base<F>(&self,
         other  : &T,
-        op     : F,
+        op     : &F,
         tf     : &mut (bool, bool),
         warns  : &mut HashMap<WarnType, (bool, bool)>,
         errors : &mut HashMap<ErrorType, (bool, bool)>
@@ -44,23 +44,21 @@ impl<T : TryOps<T> + Clone> ValConstr<T> {
                             else {tf.1 = true;}
                         },
                         Err((warn, error)) => {
-                            for typ in warn {
+                            for typ in &warn {
                                 if (! warns.contains_key(&typ)) {
-                                    warns.insert(typ, (false, false));
+                                    warns.insert(typ.clone(), (false, false));
                                 }
                             }
-                            for typ in warns.keys() {
-                                let (t, f) = warns.get_mut(typ).unwrap();
+                            for (typ, (t, f)) in &mut *warns {
                                 if (warn.contains(typ)) {*t = true;}
                                 else {*f = true;}
                             }
-                            for typ in error {
+                            for typ in &error {
                                 if (! errors.contains_key(&typ)) {
-                                    errors.insert(typ, (false, false));
+                                    errors.insert(typ.clone(), (false, false));
                                 }
                             }
-                            for typ in errors.keys() {
-                                let (t, f) = errors.get_mut(typ).unwrap();
+                            for (typ, (t, f)) in &mut *errors {
                                 if (error.contains(typ)) {*t = true;}
                                 else {*f = true;}
                             }
@@ -78,7 +76,7 @@ impl<T : TryOps<T> + Clone> ValConstr<T> {
         let mut tf     = (false, false);
         let mut warns  = HashMap::new();
         let mut errors = HashMap::new();
-        self._op_bool_base(value, op, &mut tf, &mut warns, &mut errors);
+        self._op_bool_base(value, &op, &mut tf, &mut warns, &mut errors);
         return match (tf) {
             (false, false) => TestResponse::Failed,
             (true, false)  => TestResponse::Always,
@@ -99,7 +97,7 @@ impl<T : TryOps<T> + Clone> ValConstr<T> {
                 let mut warns  = HashMap::new();
                 let mut errors = HashMap::new();
                 for other in others {
-                    self._op_bool_base(other, op, &mut tf, &mut warns, &mut errors);
+                    self._op_bool_base(other, &op, &mut tf, &mut warns, &mut errors);
                 }
                 return match (tf) {
                     (false, false) => TestResponse::Failed,

@@ -122,8 +122,8 @@ impl Expression {
                     Value::bool_from(left_val.eq(&right_val), Range(left_val.range.0, right_val.range.1))
                 } else {
                     push_error!(InvalidTypeReceived, Always, {
-                        left.range  => {"Does not match type of right side."},
-                        right.range => {"Does not match type of left side."}
+                        left.range  => {"Left side is of type `{}`.", left_val.type_def()},
+                        right.range => {"Both sides must be of the same type, but the right side is of type `{}`.", right_val.type_def()}
                     });
                     Value {
                         value : ValueType::Bool(ValConstr(ValConstrState::Failed)),
@@ -177,7 +177,7 @@ impl Expression {
                 todo!()
             },
 
-            ExpressionType::DivisionOperation(left, right) => {
+            ExpressionType::DivisionOperation(_, _) => {
                 todo!()
             },
 
@@ -311,19 +311,20 @@ impl Literal {
                     val.parse().unwrap()
                 )]))),
 
-                LiteralType::Float(int, dec) => ValueType::Int64(ValConstrOrd(ValConstrState::Some(vec![ValConstrRange::Exact(
+                LiteralType::Float(int, dec) => ValueType::Float64(ValConstrOrd(ValConstrState::Some(vec![ValConstrRange::Exact(
                     // TODO : Check parse failed.
                     format!("{}.{}", int, dec).parse().unwrap()
                 )]))),
 
                 LiteralType::Identifier(name) => {
                     if let Some(symbol) = Scope::get_symbol(name) {
-                        symbol.value.value
+                        // TODO : Movable
+                        symbol.value.value.clone()
                     } else {
                         push_error!(UnknownSymbol, Always, {
                             self.range => {"Symbol is not found in current scope."}
                         });
-                        ValueType::Void
+                        ValueType::Unknown
                     }
                 }
 
