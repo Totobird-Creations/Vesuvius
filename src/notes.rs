@@ -116,13 +116,7 @@ macro_rules! _push_note {
         let     note = CompilationNote {
             source : if (cfg!(debug_assertions)) {
                 // If in debug env, Get the location of the call.
-                Some((line!(), column!(),
-                    String::from(module_path!())
-                        // Remove package name and leading colons.
-                        [(env!("CARGO_PKG_NAME").len() + 2)..(module_path!().len())]
-                        .to_owned()
-                    )
-                )
+                Some((line!(), column!(), String::from(module_path!())))
             } else {None},
             occurance : NoteOccurance::$occur,
             note      : $typ,

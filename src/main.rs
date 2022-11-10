@@ -12,12 +12,28 @@ use std::{
     process::exit
 };
 
+use verify::scope::Scope;
+
+
+fn reset() {
+    {
+        let mut lock = notes::COMPILATION_NOTES.write();
+        lock.clear();
+    }
+    {
+        let mut lock = verify::scope::PROGRAM_INFO.write();
+        *lock = verify::scope::ProgramInfo::new();
+        Scope::root("root");
+    }
+    notes::push_warn!(UnstableVersion, Always);
+}
+
 
 fn main() {
 
     attempt!{
         "Preparing";
-        &String::new() => verify::reset()
+        &String::new() => reset()
     };
 
     let fname = "examples/basic.vsv";
@@ -27,7 +43,9 @@ fn main() {
         &script => parse::parse(&script)
     }.unwrap();
 
-    attempt!{
+    println!("{}", program);
+
+    /*attempt!{
         "Verifying";
         &script => program.verify()
     };
@@ -37,7 +55,7 @@ fn main() {
         &script => notes::push_error!(InternalError, Always, {
             parse::node::Range(0, 0) => {"Todo : Compile"}
         })
-    };
+    };*/
 
 }
 
