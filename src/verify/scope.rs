@@ -1,24 +1,29 @@
-use std::collections::HashMap;
-
-use static_init::dynamic;
+use std::{
+    collections::HashMap,
+    ops::{
+        Deref,
+        DerefMut
+    }
+};
 
 use crate::parse::node::Range;
 
 
-#[dynamic]
-pub static mut PROGRAM_INFO   : ProgramInfo = ProgramInfo::new();
-    static mut SCOPES         : Vec<Scope>  = Vec::new();
-    static mut SCOPES_TO_DROP : Vec<usize>  = Vec::new();
+static mut PROGRAM_INFO      : ProgramInfo = ProgramInfo::new();
+static mut SCOPES            : Vec<Scope>  = Vec::new();
+static mut SCOPES_TO_DROP    : Vec<usize>  = Vec::new();
+static mut SCOPE_GUARD_COUNT : usize       = 0;
 
 
 #[derive(Debug)]
 pub struct ProgramInfo {
-    pub entry : Option<(Range, Vec<String>)>,
+    _entry : Option<(Range, Vec<String>)>,
 }
+
 impl ProgramInfo {
-    pub fn new() -> ProgramInfo {
+    const fn new() -> ProgramInfo {
         return ProgramInfo {
-            entry : None
+            _entry : None
         };
     }
 }
@@ -27,15 +32,30 @@ impl ProgramInfo {
 pub struct ScopeGuard {
     index : usize
 }
-impl ScopeGuard {
 
-    pub fn get(&self) -> &mut Scope {
+impl ScopeGuard {
+    pub fn new(index : usize) -> ScopeGuard {
+        *unsafe{&mut SCOPE_GUARD_COUNT} += 1;
+        return ScopeGuard {
+            index
+        };
+    }
+}
+
+impl Deref for ScopeGuard {
+    type Target = Scope;
+    fn deref(&self) -> &Self::Target {
+        return &unsafe{&SCOPES}[self.index];
+    }
+}
+
+impl DerefMut for ScopeGuard {
+    fn deref_mut(&mut self) -> &mut Self::Target {
         return &mut unsafe{&mut SCOPES}[self.index];
     }
-
 }
-impl Drop for ScopeGuard {
 
+impl Drop for ScopeGuard {
     fn drop(&mut self) {
         unsafe{&mut SCOPES_TO_DROP}.push(self.index);
         if (self.index == unsafe{&SCOPES}.len() - 1) {
@@ -50,48 +70,51 @@ impl Drop for ScopeGuard {
                 }
             }
         }
+        *unsafe{&mut SCOPE_GUARD_COUNT} -= 1;
     }
-
 }
 
 
 #[derive(Debug)]
 pub struct Scope {
-    pub name : Option<String>,
-    pub symbols : HashMap<String, ()>
+    name     : Option<String>,
+    _symbols : HashMap<String, ()>,
+    index    : usize
 }
+
 impl Scope {
 
-    pub fn root<S : Into<String>>(name : S) {
-        if (unsafe{&SCOPES}.len() > 0) {
-            panic!("Can not create root scope because one is already defined.");
+    pub fn reset() {
+        if (unsafe{&SCOPE_GUARD_COUNT} <= &0) {
+            *unsafe{&mut PROGRAM_INFO} = ProgramInfo::new();
+            unsafe{&mut SCOPES}.clear();
         } else {
-            unsafe{&mut SCOPES}.push(Scope {
-                name    : Some(name.into()),
-                symbols : HashMap::new()
-            });
+            panic!("Can not reset when one or more scope is borrowed.")
         }
     }
 
-    pub fn new<S : Into<String>>(name : Option<S>) -> ScopeGuard {
+    pub fn new(name : Option<&str>) -> ScopeGuard {
+        let index = unsafe{&mut SCOPES}.len();
         unsafe{&mut SCOPES}.push(Scope {
-            name    : name.map(|x| x.into()),
-            symbols : HashMap::new()
-        });
-        let index = unsafe{&mut SCOPES}.len() - 1;
-        return ScopeGuard {
+            name     : name.map(|x| x.into()),
+            _symbols : HashMap::new(),
             index
-        };
+        });
+        return ScopeGuard::new(index);
     }
 
-    pub fn path() -> String {
+}
+
+impl Scope {
+
+    pub fn path(&self) -> String {
         let mut name = String::new();
-        unsafe{&SCOPES}.iter().for_each(|scope| {
-            if let Some(scope_name) = &scope.name {
-                if (name.len() > 0) {name += "::"};
-                name += scope_name;
+        for i in 0..self.index {
+            if let Some(scope) = &unsafe{&SCOPES}[i].name {
+                if (! name.is_empty()) {name += "::";}
+                name += scope;
             }
-        });
+        }
         return name;
     }
 

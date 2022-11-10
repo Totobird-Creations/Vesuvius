@@ -1,2 +1,2 @@
 pub mod scope;
-//pub mod verify;
+pub mod verify;

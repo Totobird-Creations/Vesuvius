@@ -1,31 +1,23 @@
 use crate::{
-    notes::{
-        push_error,
-        push_warn
-    },
     parse::node::*,
-    verify::{
-        scope::{
-            self,
-            Scope
-        }
+    verify::scope::{
+        Scope,
+        ScopeGuard
     }
 };
 
 
 impl Program {
-    pub fn verify(&self) {
-        push_error!(InternalError, Always, {
-            Range(0, 0) => {"Todo."}
-        });
+    pub fn verify(&self, name : &str) {
+        let scope = Scope::new(Some(name));
+        for decl in &self.decls {
+            decl.register(&scope);
+        }
     }
 }
 
-
-impl Block {
-    fn verify(&self, name : Option<&String>) {
-        println!("a");
-        let scope = Scope::new(name);
-        println!("b");
+impl Declaration {
+    fn register(&self, scope : &ScopeGuard) {
+        println!("{}", scope.path())
     }
 }

@@ -21,9 +21,9 @@ fn reset() {
         lock.clear();
     }
     {
-        let mut lock = verify::scope::PROGRAM_INFO.write();
-        *lock = verify::scope::ProgramInfo::new();
-        Scope::root("root");
+        Scope::reset();
+        let a = Scope::new(None);
+        Scope::reset();
     }
     notes::push_warn!(UnstableVersion, Always);
 }
@@ -45,17 +45,17 @@ fn main() {
 
     println!("{}", program);
 
-    /*attempt!{
+    attempt!{
         "Verifying";
-        &script => program.verify()
+        &script => program.verify("root")
     };
 
     attempt!{
         "Compiling";
-        &script => notes::push_error!(InternalError, Always, {
+        fin &script => notes::push_error!(InternalError, Always, {
             parse::node::Range(0, 0) => {"Todo : Compile"}
         })
-    };*/
+    };
 
 }
 

@@ -71,32 +71,43 @@ pub fn dump<'l, S : Into<&'l String>>(mut line_len : usize, finish : bool, scrip
     let (warns, errors) = counts;
     if (finish || errors > 0) {
         // Finished or failed.
-        let mut finished = if (errors > 0) {
-            String::from("\x1b[31m\x1b[1mFailed\x1b[0m")
+        let (mut finished, mut finished_len) = if (errors > 0) {
+            (String::from("\x1b[31m\x1b[1mFailed\x1b[0m"), 6)
         } else {
-            String::from("\x1b[32m\x1b[1mFinished\x1b[0m")
+            (String::from("\x1b[32m\x1b[1mFinished\x1b[0m"), 8)
         };
         // Note type counts.
         let mut with = Vec::new();
-        if (warns > 0)  {with.push(format!("\x1b[33m{} warning{}\x1b[0m" , warns  , if (warns != 1)  {"s"} else {""}));}
-        if (errors > 0) {with.push(format!("\x1b[31m{} error{}\x1b[0m"   , errors , if (errors != 1) {"s"} else {""}));}
+        if (warns > 0)  {
+            let message   = format!("{} warning{}", warns, if (warns != 1) {"s"} else {""});
+            finished_len += message.len();
+            with.push(format!("\x1b[33m{}\x1b[0m", message));
+        }
+        if (errors > 0) {
+            let message   = format!("{} error{}", warns, if (warns != 1) {"s"} else {""});
+            finished_len += message.len();
+            with.push(format!("\x1b[31m{}\x1b[0m", message));
+        }
         if (with.len() > 0) {
-            finished += " with ";
-            finished += &with[0];
+            finished     += " with ";
+            finished_len += 6;
+            finished     += &with[0];
             if (with.len() > 2) {
                 for section in &with[1..(with.len() - 1)] {
-                    finished += ", ";
-                    finished += section;
+                    finished     += ", ";
+                    finished_len += 2;
+                    finished     += section;
                 }
             }
             if (with.len() > 1) {
-                finished += " and ";
-                finished += &with[with.len() - 1];
+                finished     += " and ";
+                finished_len += 5;
+                finished     += &with[with.len() - 1];
             }
         }
-        finished += ".";
         // Print final message.
-        final_text += &format!("\n \x1b[37m\x1b[2m=>\x1b[0m {}\n", finished);
+        final_text += &format!("\n \x1b[37m\x1b[2m=>\x1b[0m {}.\n", finished);
+        final_text += &format!("\x1b[90m{}\x1b[0m\n\n", "─".repeat(5 + finished_len));
     }
     notes_dumped.append(&mut notes);
     return if (errors > 0) {
