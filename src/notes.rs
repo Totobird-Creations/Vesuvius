@@ -2,7 +2,10 @@ use std::cmp::max;
 
 use static_init::dynamic;
 
-use crate::parse::node::Range;
+use crate::{
+    parse::node::Range,
+    verify::scope::ProgramInfo
+};
 
 
 const VERTICAL_CUTOFF : usize = 3;
@@ -24,6 +27,7 @@ enum_named!{NoteOccurance {
 enum_named!{ErrorType {
     #[doc("Something within the compiler did not function properly.")]
     InternalError,
+    FileNotFound,
     UnexpectedToken,
     DuplicateEntryHeader,
     InvalidTypeReceived,
@@ -43,7 +47,7 @@ pub fn explain(_id : usize) {
 }
 
 
-pub fn dump<'l, S : Into<&'l String>>(mut line_len : usize, finish : bool, script : S) -> Result<String, String> {
+pub fn dump(mut line_len : usize, finish : bool) -> Result<String, String> {
     let mut final_text = String::new();
 
     let mut notes        = COMPILATION_NOTES.write();
@@ -52,10 +56,9 @@ pub fn dump<'l, S : Into<&'l String>>(mut line_len : usize, finish : bool, scrip
         0, // Warn
         0  // Error
     );
-    let     script   = script.into();
     // For each note, print a line, and the note.
     for note in notes.iter() {
-        let res = note.fmt(script, &mut counts);
+        let res = note.fmt(&mut counts);
         final_text += &format!("\x1b[90m{}\x1b[0m\n{}\n", "─".repeat(max(res.1, line_len)), res.0);
         line_len = res.1;
     }
@@ -120,7 +123,7 @@ pub fn dump<'l, S : Into<&'l String>>(mut line_len : usize, finish : bool, scrip
 
 // Add a note to be printed after verification is complete.
 #[allow(unused)]
-macro_rules! _push_note {
+macro _push_note {
     ($typ:expr, $occur:ident, {$($range:expr => {$($text:tt)+}),*}) => {{
         use $crate::notes::*;
         let mut lock = COMPILATION_NOTES.write();
@@ -136,40 +139,37 @@ macro_rules! _push_note {
         lock.push(note);
     }}
 }
-pub(crate) use _push_note;
 
 // Add an error to be printed after verification is complete.
 // Errors will prevent compilation.
 #[allow(unused)]
-macro_rules! push_error {
-    ($typ:ident, $occur:ident) => {$crate::notes::push_error!($typ, $occur, {})};
+pub macro push_error {
+    ($typ:ident, $occur:ident) => {$crate::notes::push_error!($typ, $occur, {})},
     ($typ:ident, $occur:ident, {$($range:expr => {$($text:tt)+}),*}) => {{
         $crate::notes::_push_note!(NoteType::Error(ErrorType::$typ), $occur, {$($range => {$($text)+}),*});
     }}
 }
-pub(crate) use push_error;
 
 // Add a warning to be printed after verification is complete.
 // Warnings will not prevent compilation, but will be corrected by the verifier.
 #[allow(unused)]
-macro_rules! push_warn {
-    ($typ:ident, $occur:ident) => {$crate::notes::push_warn!($typ, $occur, {})};
+pub macro push_warn {
+    ($typ:ident, $occur:ident) => {$crate::notes::push_warn!($typ, $occur, {})},
     ($typ:ident, $occur:ident, {$($range:expr => {$($text:tt)+}),*}) => {{
         $crate::notes::_push_note!(NoteType::Warn(WarnType::$typ), $occur, {$($range => {$($text)+}),*});
     }}
 }
-pub(crate) use push_warn;
 
 
 pub struct CompilationNote {
     pub source    : Option<(u32, u32, String)>,
     pub occurance : NoteOccurance,
     pub note      : NoteType,
-    pub details   : Vec<(Range, String)>
+    pub details   : Vec<(Option<Range>, String)>
 }
 impl CompilationNote {
-    fn fmt(&self, script : &String, counts : &mut (u64, u64)) -> (String, usize) {
-        let text = self.note.fmt(script, &self.occurance, &self.details, counts);
+    fn fmt(&self, counts : &mut (u64, u64)) -> (String, usize) {
+        let text = self.note.fmt(&self.occurance, &self.details, counts);
         return (
             format!("{}{}",
                 if let Some((line, col, file)) = &self.source {
@@ -212,7 +212,7 @@ impl NoteType {
         }
     }
     // Format the note.
-    fn fmt(&self, script : &String, occurance : &NoteOccurance, details : &Vec<(Range, String)>, (warns, errors) : &mut (u64, u64)) -> (String, usize) {
+    fn fmt(&self, occurance : &NoteOccurance, details : &Vec<(Option<Range>, String)>, (warns, errors) : &mut (u64, u64)) -> (String, usize) {
         // Get the note type info.
         let (title, id, id_len, internal_error) = match (self) {
             Self::Warn(warn) => {
@@ -248,73 +248,92 @@ impl NoteType {
             if (details.len() > 0) {
                 // Add details.
                 details.iter().map(|detail| {
-                    // Get the location of the detail.
-                    let     range       = detail.0.to_linecolumn(script);
-                    // Get the lines, and cut off unneeded information.
-                    let mut lines       = Vec::new();
-                    let mut lines_pad   = 0;
-                    let mut vert_cutoff = None;
-                    for l in (range.0.0 - 1)..range.1.0 {
-                        if (l - (range.0.0 - 1) >= VERTICAL_CUTOFF && range.1.0 - l > VERTICAL_CUTOFF) {
-                            if (matches!(vert_cutoff, None)) {
-                                vert_cutoff = Some(l);
+                    let (location, above_line, lines, below_line, lines_pad) = if let Some(range) = &detail.0 {
+                        // Get the script at the file of the detail.
+                        let script = ProgramInfo::get().script_of(&range.0);
+                        // Get the location of the detail.
+                        let range = range.to_linecolumn(&script);
+                        // Get the lines, and cut off unneeded information.
+                        let mut lines       = Vec::new();
+                        let mut lines_pad   = 0;
+                        let mut vert_cutoff = None;
+                        for l in (range.1.0 - 1)..range.2.0 {
+                            if (l - (range.1.0 - 1) >= VERTICAL_CUTOFF && range.2.0 - l > VERTICAL_CUTOFF) {
+                                if (matches!(vert_cutoff, None)) {
+                                    vert_cutoff = Some(l);
+                                }
+                                continue;
                             }
-                            continue;
+                            let line     = script.lines().nth(l).unwrap();
+                            let line_pad = (l + 1).to_string().len();
+                            if (line_pad > lines_pad) {
+                                lines_pad = line_pad;
+                            }
+                            lines.push((l + 1, line));
                         }
-                        let line     = script.lines().nth(l).unwrap();
-                        let line_pad = (l + 1).to_string().len();
-                        if (line_pad > lines_pad) {
-                            lines_pad = line_pad;
-                        }
-                        lines.push((l + 1, line));
-                    }
+                        (
+                            format!("   \x1b[90m┌\x1b[0m `\x1b[94m{:?}\x1b[0m` \x1b[94m\x1b[1m{}\x1b[0m\x1b[34m:\x1b[94m\x1b[1m{}\x1b[0m\x1b[34m..\x1b[0m\x1b[94m\x1b[1m{}\x1b[0m\x1b[34m:\x1b[0m\x1b[94m\x1b[1m{}\x1b[0m",
+                                range.0,
+                                range.1.0,
+                                range.1.1,
+                                range.2.0,
+                                range.2.1,
+                            ),
+                            if (lines.len() > 1) {
+                                format!("\n   \x1b[90m│ {} │\x1b[0m\x1b[95m\x1b[1m{}┌{}\x1b[0m",
+                                    " ".repeat(lines_pad),
+                                    " ".repeat(range.1.1),
+                                    "─".repeat(lines[0].1.len() - range.1.1)
+                                )
+                            } else {String::new()},
+                            lines.iter().map(|(l, line)| {
+                                format!("\n   \x1b[90m│\x1b[0m \x1b[94m\x1b[2m{: >lines_pad$}\x1b[0m \x1b[90m│\x1b[0m {}{}",
+                                    l, line,
+                                    // If some of the lines were cut off, add an empty line and some dots.
+                                    if let Some(vert_cutoff) = vert_cutoff {
+                                        if (vert_cutoff == *l) {
+                                            format!("\n  \x1b[90m│\x1b[0m \x1b[94m\x1b[2m{}\x1b[0m \x1b[90m│\x1b[0m",
+                                                "·".repeat(lines_pad)
+                                            )
+                                        } else {String::new()}
+                                    } else {String::new()}
+                                )
+                            }).collect::<Vec<_>>().join(""),
+                            format!("\n   \x1b[90m│ {} │\x1b[0m\x1b[95m\x1b[1m{}\x1b[0m",
+                                " ".repeat(lines_pad),
+                                // If the detail is single line, add a marker showing the start and end of the detail.
+                                if (lines.len() <= 1) {
+                                    format!("{}{}",
+                                        " ".repeat(range.1.1),
+                                        if (range.2.1 - range.1.1 <= 1) {
+                                            String::from("╵")
+                                        } else if (range.1.1 != range.2.1) {
+                                            format!("└{}┘", "─".repeat(range.2.1 - range.1.1 - 2))
+                                        } else {String::new()}
+                                    )
+                                // If the detail is multi line, add a marker showing the end of the detail, with a line from the sol.
+                                } else {format!(" {}┘", "─".repeat(range.2.1 - 2))}
+                            ),
+                            lines_pad
+                        )
+                    } else {
+                        (
+                            String::new(),
+                            String::new(),
+                            String::new(),
+                            String::new(),
+                            0
+                        )
+                    };
                     // Format the detail.
                     format!("\n{}{}{}{}\n{}",
                         // Location of the detail.
-                        format!("   \x1b[90m┌\x1b[0m `\x1b[94m{}\x1b[0m` \x1b[94m\x1b[1m{}\x1b[0m\x1b[34m:\x1b[94m\x1b[1m{}\x1b[0m\x1b[34m..\x1b[0m\x1b[94m\x1b[1m{}\x1b[0m\x1b[34m:\x1b[0m\x1b[94m\x1b[1m{}\x1b[0m",
-                            "todo_filename.vsv",
-                            range.0.0,
-                            range.0.1,
-                            range.1.0,
-                            range.1.1
-                        ),
+                        location,
                         // If the detail is multi line, add a marker showing the start of the detail, with a line to eol.
-                        if (lines.len() > 1) {
-                            format!("\n   \x1b[90m│ {} │\x1b[0m\x1b[95m\x1b[1m{}┌{}\x1b[0m",
-                                " ".repeat(lines_pad),
-                                " ".repeat(range.0.1),
-                                "─".repeat(lines[0].1.len() - range.0.1)
-                            )
-                        } else {String::new()},
+                        above_line,
                         // Add the code line.
-                        lines.iter().map(|(l, line)| {
-                            format!("\n   \x1b[90m│\x1b[0m \x1b[94m\x1b[2m{: >lines_pad$}\x1b[0m \x1b[90m│\x1b[0m {}{}",
-                                l, line,
-                                // If some of the lines were cut off, add an empty line and some dots.
-                                if let Some(vert_cutoff) = vert_cutoff {
-                                    if (vert_cutoff == *l) {
-                                        format!("\n  \x1b[90m│\x1b[0m \x1b[94m\x1b[2m{}\x1b[0m \x1b[90m│\x1b[0m",
-                                            "·".repeat(lines_pad)
-                                        )
-                                    } else {String::new()}
-                                } else {String::new()}
-                            )
-                        }).collect::<Vec<_>>().join(""),
-                        format!("\n   \x1b[90m│ {} │\x1b[0m\x1b[95m\x1b[1m{}\x1b[0m",
-                            " ".repeat(lines_pad),
-                            // If the detail is single line, add a marker showing the start and end of the detail.
-                            if (lines.len() <= 1) {
-                                format!("{}{}",
-                                    " ".repeat(range.0.1),
-                                    if (range.1.1 - range.0.1 <= 1) {
-                                        String::from("╵")
-                                    } else if (range.0.1 != range.1.1) {
-                                        format!("└{}┘", "─".repeat(range.1.1 - range.0.1 - 2))
-                                    } else {String::new()}
-                                )
-                            // If the detail is multi line, add a marker showing the end of the detail, with a line from the sol.
-                            } else {format!(" {}┘", "─".repeat(range.1.1 - 2))}
-                        ),
+                        lines,
+                        below_line,
                         // The detail message.
                         format!("   \x1b[90m└─{}─┴──\x1b[0m {}{}\x1b[0m", "─".repeat(lines_pad), self.cl(), detail.1)
                     )

@@ -1,3 +1,4 @@
+#![feature(absolute_path, decl_macro)]
 #![allow(unused_parens, non_snake_case)]
 
 pub mod notes;
@@ -5,11 +6,8 @@ pub mod parse;
 pub mod verify;
 
 use std::{
-    io::{
-        stdout,
-        Write
-    },
-    process::exit
+    process::exit,
+    path::PathBuf
 };
 
 use verify::scope::Scope;
@@ -33,20 +31,20 @@ fn main() {
 
     attempt!{
         "Preparing";
-        &String::new() => reset()
+        reset()
     };
 
-    let fname = "examples/basic.vsv";
-    let script = parse::read(fname);
-    let program = attempt!{
-        "Parsing";
-        &script => parse::parse(&script)
-    }.unwrap();
-
+    let fname = PathBuf::from("./examples/basic/main");
     attempt!{
-        "Verifying";
-        &script => program.verify("program")
+        "Parsing";
+        parse::get_all_modules(None, fname)
     };
+
+    println!("\n");
+    for (file, program) in verify::scope::ProgramInfo::get().modules() {
+        println!("\n\n{:?}\n", file);
+        println!("{}", program);
+    }
 
     /*attempt!{
         "Compiling";
@@ -58,38 +56,40 @@ fn main() {
 }
 
 
-macro_rules! attempt {
-    {$title:expr; fin $script:expr => $expr:expr} => {
-        $crate::attempt!{$title; true $script => $expr}
-    };
-    {$title:expr; $script:expr => $expr:expr} => {
-        $crate::attempt!{$title; false $script => $expr}
-    };
-    {$title:expr; $fin:ident $script:expr => $expr:expr} => {{
-        printw!("\n \x1b[37m\x1b[2m=>\x1b[0m \x1b[96m{}\x1b[0m\x1b[36m\x1b[2m...\x1b[0m", $title);
+macro attempt {
+    {$title:expr; fin; $expr:expr} => {
+        $crate::attempt!{$title; true; $expr}
+    },
+    {$title:expr; $expr:expr} => {
+        $crate::attempt!{$title; false; $expr}
+    },
+    {$title:expr; $fin:ident; $expr:expr} => {{
+        $crate::printw!("\n \x1b[37m\x1b[2m=>\x1b[0m \x1b[96m{}\x1b[0m\x1b[36m\x1b[2m...\x1b[0m", $title);
         let v = $expr;
-        match ($crate::notes::dump(4 + $title.len() + 13, $fin, $script)) {
+        match ($crate::notes::dump(4 + $title.len() + 13, $fin)) {
             Ok(text) => {
-                printw!(" [\x1b[32m\x1b[1mSUCCESS\x1b[0m]\n");
-                printw!("{}", text);
+                $crate::printw!(" [\x1b[32m\x1b[1mSUCCESS\x1b[0m]\n");
+                $crate::printw!("{}", text);
             },
             Err(text) => {
-                printw!(" [\x1b[31m\x1b[1mFAILURE\x1b[0m]\n");
-                printw!("{}", text);
+                $crate::printw!(" [\x1b[31m\x1b[1mFAILURE\x1b[0m]\n");
+                $crate::printw!("{}", text);
                 $crate::exit(1);
             }
         };
         v
-    }};
+    }}
 }
-use attempt;
 
 
-macro_rules! printw {
+macro printw {
     ($($tt:tt)*) => {{
+        use std::io::{
+            stdout,
+            Write
+        };
         let mut stdout = stdout();
         write!(stdout, $($tt)*).unwrap();
         stdout.flush().unwrap();
     }}
 }
-use printw;

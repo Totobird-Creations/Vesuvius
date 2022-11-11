@@ -2,19 +2,37 @@ pub mod node;
 pub mod grammer;
 pub mod node_fmt;
 
-use std::fs;
+use std::{
+    fs::read_to_string,
+    path::PathBuf
+};
 
-use crate::notes::push_error;
+use crate::{
+    parse::node::{
+        Range,
+        Program
+    },
+    notes::push_error,
+    verify::scope::ProgramInfo
+};
 
 
-pub fn read<S : Into<String>>(file : S) -> String {
-    return fs::read_to_string(file.into()).unwrap();
+fn read(importer : &Option<Range>, path : &PathBuf) -> Option<String> {
+    return match (read_to_string(path.with_extension("vsv"))) {
+        Ok(script) => Some(script),
+        Err(error) => {
+            push_error!(FileNotFound, Always, {
+                importer.clone() => {"{}", error}
+            });
+            None
+        }
+    };
 }
 
-pub fn parse<S : Into<String>>(text : S) -> Option<node::Program> {
-    return grammer::parse(text.into())
+fn parse(text : &str, path : PathBuf) -> Option<Program> {
+    return grammer::parse(text.into(), &path)
         .map_err(|e| {push_error!(UnexpectedToken, Always, {
-            node::Range(e.location.offset, e.location.offset) => {"{}.", {
+            Some(Range(path, e.location.offset, e.location.offset)) => {"{}.", {
                 let mut tokens = e.expected.tokens().collect::<Vec<_>>();
                 if (tokens.len() == 1) {
                     format!("Expected {}", tokens[0])
@@ -32,4 +50,14 @@ pub fn parse<S : Into<String>>(text : S) -> Option<node::Program> {
             }}
         }); e})
         .ok();
+}
+
+
+pub fn get_all_modules(importer : Option<Range>, path : PathBuf) {
+    if let Some(script) = read(&importer, &path) {
+        ProgramInfo::get().add_module(path.clone(), script.clone());
+        if let Some(program) = parse(&script, path.clone()) {
+            ProgramInfo::get().load_module(path, program);
+        }
+    }
 }

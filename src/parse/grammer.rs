@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use peg::{
     parser,
     error::ParseError,
@@ -7,12 +9,12 @@ use peg::{
 use crate::parse::node::*;
 
 
-pub fn parse(text : String) -> Result<Program, ParseError<LineCol>> {
-    return parser::traced_parse(&text);
+pub fn parse(text : String, fname : &PathBuf) -> Result<Program, ParseError<LineCol>> {
+    return parser::traced_parse(&text, fname);
 }
 
 
-parser! {pub grammar parser() for str {
+parser! {pub grammar parser(fname : &PathBuf) for str {
 
     pub rule traced_parse() -> Program = traced(<parse()>)
     rule traced<T>(e: rule<T>) -> T =
@@ -36,12 +38,12 @@ parser! {pub grammar parser() for str {
     rule declaration() -> Declaration
         = headers:(header:declaration_header() _ {header})* _
           vis:declaration_visibility()
-          start:position!() decl:(declaration_function()) end:position!() _
+          start:position!() decl:(declaration_import() / declaration_function()) end:position!() _
             {Declaration {
                 headers,
                 vis,
                 decl,
-                range   : Range(start, end)
+                range   : Range(fname.clone(), start, end)
             }}
 
     rule declaration_header() -> DeclarationHeader
@@ -50,7 +52,7 @@ parser! {pub grammar parser() for str {
         )"]" end:position!()
             {DeclarationHeader {
                 header,
-                range  : Range(start, end)
+                range  : Range(fname.clone(), start, end)
             }}
 
     rule declaration_visibility() -> DeclarationVisibility
@@ -62,25 +64,29 @@ parser! {pub grammar parser() for str {
                 let vis = if let Some(vis) = vis {vis} else {DeclarationVisibilityType::Private};
                 DeclarationVisibility {
                     vis,
-                    range : Range(start, end)
+                    range : Range(fname.clone(), start, end)
                 }
             }
 
 
+    rule declaration_import() -> DeclarationType
+        = "mod" __ start:position!() parts:((part:ident() _ {part}) ++ "::") end:position!()
+            {DeclarationType::Module(parts, Range(fname.clone(), start, end))}
+
     rule declaration_function() -> DeclarationType
         = "fn" __ start:position!() name:ident() end:position!() _ /* TODO : Arguments and return */ block:block()
-            {DeclarationType::Function(name, Range(start, end), Vec::new(), None, block)}
+            {DeclarationType::Function(name, Range(fname.clone(), start, end), Vec::new(), None, block)}
 
 
 
     rule statement() -> Statement
         = start:position!() stmt:("let" __ start_name:position!() name:ident() end_name:position!() _ "=" _ value:expression()
-            {StatementType::InitVar(name, Range(start_name, end_name), value)}
+            {StatementType::InitVar(name, Range(fname.clone(), start_name, end_name), value)}
         / expr:expression()
             {StatementType::Expression(expr)}
         ) end:position!() {Statement {
             stmt,
-            range : Range(start, end)
+            range : Range(fname.clone(), start, end)
         }}
 
 
@@ -95,7 +101,7 @@ parser! {pub grammar parser() for str {
         {
             let mut left = left;
             for (op, right) in ops {
-                let range = Range(left.range.0, right.range.1);
+                let range = Range(fname.clone(), left.range.1, right.range.2);
                 left = Expression {
                     expr : match (op) {
                         "==" => ExpressionType::EqualsOperation(Box::new(left), Box::new(right)),
@@ -117,7 +123,7 @@ parser! {pub grammar parser() for str {
         {
             let mut left = left;
             for (op, right) in ops {
-                let range = Range(left.range.0, right.range.1);
+                let range = Range(fname.clone(), left.range.1, right.range.2);
                 left = Expression {
                     expr : match (op) {
                         "+" => ExpressionType::AdditionOperation(Box::new(left), Box::new(right)),
@@ -133,18 +139,18 @@ parser! {pub grammar parser() for str {
     rule expression_multiply() -> Expression
         = left:atom() _ ops:(op:$("*" / "/") _ right:atom() _ {(op, right)})*
             {
-                let     left_range = left.range;
+                let     left_range = left.range.clone();
                 let mut left       = Expression {
                     expr  : ExpressionType::Atom(left),
                     range : left_range
                 };
                 for (op, right) in ops {
-                    let right_range = right.range;
+                    let right_range = right.range.clone();
                     let right       = Expression {
                         expr  : ExpressionType::Atom(right),
                         range : right_range
                     };
-                    let range = Range(left.range.0, right.range.1);
+                    let range = Range(fname.clone(), left.range.1, right.range.2);
                     left = Expression {
                         expr : match (op) {
                             "*" => ExpressionType::MultiplicationOperation(Box::new(left), Box::new(right)),
@@ -169,15 +175,15 @@ parser! {pub grammar parser() for str {
             {AtomType::Literal(lit)}
         ) end:position!() {Atom {
             atom  : atom,
-            range : Range(start, end)
+            range : Range(fname.clone(), start, end)
         }}
     
     rule atom_if() -> AtomType
         = ifstart:position!() "if" _ "(" _ ifcondi:expression() _ ")" _ ifblock:block() ifend:position!() _
-          elf:(elifstart:position!() "elif" _ "(" _ elifcondi:expression() _ ")" _ elifblock:block() elifend:position!() _ {(Box::new(elifcondi), elifblock, Range(elifstart, elifend))})*
-          els:(elsestart:position!() "else" _ elseblock:block() elseend:position!() {(elseblock, Range(elsestart, elseend))})?
+          elf:(elifstart:position!() "elif" _ "(" _ elifcondi:expression() _ ")" _ elifblock:block() elifend:position!() _ {(Box::new(elifcondi), elifblock, Range(fname.clone(), elifstart, elifend))})*
+          els:(elsestart:position!() "else" _ elseblock:block() elseend:position!() {(elseblock, Range(fname.clone(), elsestart, elseend))})?
             {
-                let mut ifs  = vec![(Box::new(ifcondi), ifblock, Range(ifstart, ifend))];
+                let mut ifs  = vec![(Box::new(ifcondi), ifblock, Range(fname.clone(), ifstart, ifend))];
                 let mut elf = elf;
                 ifs.append(&mut elf);
                 AtomType::If(
@@ -198,13 +204,13 @@ parser! {pub grammar parser() for str {
             }}
         ) end:position!() {Literal {
             lit,
-            range : Range(start, end)
+            range : Range(fname.clone(), start, end)
         }}
 
     rule block() -> Block
         = start:position!() "{" _ b:(s:((_ s:statement() _ {s}) ++ ";") r:";"? {(s, r)})? _ "}" end:position!()
             {
-                let range = Range(start, end);
+                let range = Range(fname.clone(), start, end);
                 if let Some(body) = b {
                     Block {
                         stmts   : body.0,

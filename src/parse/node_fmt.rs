@@ -84,6 +84,13 @@ impl DeclarationType {
     fn format(&self, indent : usize) -> String {
         return match (self) {
 
+            Self::Module(parts, _) => {
+                format!("{} {}",
+                    c!(OBJECT, "mod"),
+                    parts.join("::")
+                )
+            },
+
             Self::Function(name, _, _args, _ret, block) => {
                 format!("{} {} {}",
                     c!(OBJECT, "fn"),
@@ -219,9 +226,8 @@ impl Debug for Block {
 
 
 
-macro_rules! c {
+macro c {
     ($colour:ident, $expr:expr) => {
         format!("{}{}\x1b[0m", $colour, $expr)
     }
 }
-use c;

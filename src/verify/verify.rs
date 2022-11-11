@@ -1,31 +1,23 @@
-use crate::{
-    parse::node::*,
-    verify::scope::{
-        Scope,
-        ScopeGuard
-    }
-};
+use crate::parse::node::*;
+
 
 
 impl Program {
-    pub fn verify(&self, name : &str) {
-        let scope = Scope::new(Some(name));
+
+    pub fn verify(&self) {
         for decl in &self.decls {
-            decl.register(&scope);
+            decl.register();
         }
     }
+
 }
+
 
 
 impl Declaration {
 
-    fn register(&self, scope : &ScopeGuard) {
-        match (&self.decl) {
-
-            DeclarationType::Function(name, range, _, _, block) => {
-            }
-
-        }
+    fn register(&self) {
+        todo!();
     }
 
 }

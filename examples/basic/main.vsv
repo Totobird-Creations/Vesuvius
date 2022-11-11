@@ -1,3 +1,8 @@
+
+mod module;
+mod test::module2;
+
+
 #[entry]
 pub fn main {
 
