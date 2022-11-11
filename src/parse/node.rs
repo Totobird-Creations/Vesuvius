@@ -24,42 +24,42 @@ pub struct LineColumn(pub PathBuf, pub (usize, usize), pub (usize, usize));
 
 
 #[derive(Debug)]
-pub struct Program {
-    pub decls : Vec<Declaration>
+pub(crate) struct Program {
+    pub(crate) decls : Vec<Declaration>
 }
 
 
 #[derive(Debug)]
-pub struct Declaration {
-    pub headers : Vec<DeclarationHeader>,
-    pub vis     : DeclarationVisibility,
-    pub decl    : DeclarationType,
-    pub range   : Range
+pub(crate) struct Declaration {
+    pub(crate) headers : Vec<DeclarationHeader>,
+    pub(crate) vis     : DeclarationVisibility,
+    pub(crate) decl    : DeclarationType,
+    pub(crate) range   : Range
 }
 
 #[derive(Debug)]
-pub struct DeclarationHeader {
-    pub header : DeclarationHeaderType,
-    pub range  : Range
+pub(crate) struct DeclarationHeader {
+    pub(crate) header : DeclarationHeaderType,
+    pub(crate) range  : Range
 }
 #[derive(Debug)]
-pub enum DeclarationHeaderType {
+pub(crate) enum DeclarationHeaderType {
     Entry
 }
 
 #[derive(Debug)]
-pub struct DeclarationVisibility {
-    pub vis   : DeclarationVisibilityType,
-    pub range : Range
+pub(crate) struct DeclarationVisibility {
+    pub(crate) vis   : DeclarationVisibilityType,
+    pub(crate) range : Range
 }
 #[derive(Debug)]
-pub enum DeclarationVisibilityType {
+pub(crate) enum DeclarationVisibilityType {
     Public,
     Private
 }
 
 #[derive(Debug)]
-pub enum DeclarationType {
+pub(crate) enum DeclarationType {
     Module(
         Vec<String>,
         Range
@@ -75,12 +75,12 @@ pub enum DeclarationType {
 
 
 #[derive(Debug, Clone)]
-pub struct Statement {
-    pub stmt  : StatementType,
-    pub range : Range
+pub(crate) struct Statement {
+    pub(crate) stmt  : StatementType,
+    pub(crate) range : Range
 }
 #[derive(Debug, Clone)]
-pub enum StatementType {
+pub(crate) enum StatementType {
     InitVar(
         String,    // Name
         Range,     // Name Range
@@ -90,12 +90,12 @@ pub enum StatementType {
 }
 
 #[derive(Debug, Clone)]
-pub struct Expression {
-    pub expr  : ExpressionType,
-    pub range : Range
+pub(crate) struct Expression {
+    pub(crate) expr  : ExpressionType,
+    pub(crate) range : Range
 }
 #[derive(Debug, Clone)]
-pub enum ExpressionType {
+pub(crate) enum ExpressionType {
 
     EqualsOperation(Box<Expression>, Box<Expression>),
     NotEqualsOperation(Box<Expression>, Box<Expression>),
@@ -113,12 +113,12 @@ pub enum ExpressionType {
 
 
 #[derive(Debug, Clone)]
-pub struct Atom {
-    pub atom  : AtomType,
-    pub range : Range
+pub(crate) struct Atom {
+    pub(crate) atom  : AtomType,
+    pub(crate) range : Range
 }
 #[derive(Debug, Clone)]
-pub enum AtomType {
+pub(crate) enum AtomType {
     Literal(Literal),
     Expression(Box<Expression>),
     If(
@@ -135,12 +135,12 @@ pub enum AtomType {
 }
 
 #[derive(Debug, Clone)]
-pub struct Literal {
-    pub lit   : LiteralType,
-    pub range : Range
+pub(crate) struct Literal {
+    pub(crate) lit   : LiteralType,
+    pub(crate) range : Range
 }
 #[derive(Debug, Clone)]
-pub enum LiteralType {
+pub(crate) enum LiteralType {
     Int(String),
     Float(
         String, // Integer
@@ -151,21 +151,21 @@ pub enum LiteralType {
 
 
 #[derive(Debug, Clone)]
-pub enum TypeDescriptorParts {
+pub(crate) enum TypeDescriptorParts {
     BuiltIn(String),
     Custom(Vec<String>)
 }
 
 #[derive(Debug, Clone)]
-pub struct TypeDescriptor {
-    pub parts  : TypeDescriptorParts,
-    pub constr : HashMap<String, Literal>
+pub(crate) struct TypeDescriptor {
+    pub(crate) parts  : TypeDescriptorParts,
+    pub(crate) constr : HashMap<String, Literal>
 }
 
 
 #[derive(Clone)]
-pub struct Block {
-    pub stmts   : Vec<Statement>,
-    pub retlast : bool,           // Return the value of the last statement
-    pub range   : Range
+pub(crate) struct Block {
+    pub(crate) stmts   : Vec<Statement>,
+    pub(crate) retlast : bool,           // Return the value of the last statement
+    pub(crate) range   : Range
 }

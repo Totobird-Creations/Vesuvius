@@ -1,19 +1,23 @@
 use std::cmp::max;
 
-use static_init::dynamic;
-
 use crate::{
     parse::node::Range,
-    verify::scope::ProgramInfo
+    scope::ProgramInfo
 };
 
 
 const VERTICAL_CUTOFF : usize = 3;
 
-#[dynamic]
-pub(crate) static mut COMPILATION_NOTES_DUMPED : Vec<CompilationNote> = Vec::new();
-#[dynamic]
-pub(crate) static mut COMPILATION_NOTES : Vec<CompilationNote> = Vec::new();
+
+pub(crate) mod global {
+    #![allow(non_camel_case_types)]
+    use static_init::dynamic;
+    use super::CompilationNote;
+    #[dynamic]
+    pub(crate) static mut COMPILATION_NOTES_DUMPED : Vec<CompilationNote> = Vec::new();
+    #[dynamic]
+    pub(crate) static mut COMPILATION_NOTES : Vec<CompilationNote> = Vec::new();
+}
 
 
 // Different occurance states, with the formatting functions auto generated..
@@ -42,16 +46,16 @@ enum_named!{WarnType += ErrorType {
 }}
 
 
-pub fn explain(_id : usize) {
+pub(crate) fn explain(_id : usize) {
     todo!();
 }
 
 
-pub fn dump(mut line_len : usize, finish : bool) -> Result<String, String> {
+pub(crate) fn dump(mut line_len : usize, finish : bool) -> Result<String, String> {
     let mut final_text = String::new();
 
-    let mut notes        = COMPILATION_NOTES.write();
-    let mut notes_dumped = COMPILATION_NOTES_DUMPED.write();
+    let mut notes        = global::COMPILATION_NOTES.write();
+    let mut notes_dumped = global::COMPILATION_NOTES_DUMPED.write();
     let mut counts = (
         0, // Warn
         0  // Error
@@ -126,7 +130,7 @@ pub fn dump(mut line_len : usize, finish : bool) -> Result<String, String> {
 macro _push_note {
     ($typ:expr, $occur:ident, {$($range:expr => {$($text:tt)+}),*}) => {{
         use $crate::notes::*;
-        let mut lock = COMPILATION_NOTES.write();
+        let mut lock = global::COMPILATION_NOTES.write();
         let     note = CompilationNote {
             source : if (cfg!(debug_assertions)) {
                 // If in debug env, Get the location of the call.
@@ -161,7 +165,7 @@ pub macro push_warn {
 }
 
 
-pub struct CompilationNote {
+pub(crate) struct CompilationNote {
     pub source    : Option<(u32, u32, String)>,
     pub occurance : NoteOccurance,
     pub note      : NoteType,
@@ -185,7 +189,7 @@ impl CompilationNote {
     }
 }
 
-pub enum NoteType {
+pub(crate) enum NoteType {
     Warn(WarnType),  // User did something that is unrecommended.
     Error(ErrorType) // User did something that is forbidden, or internal error.
 }
@@ -248,7 +252,7 @@ impl NoteType {
             if (details.len() > 0) {
                 // Add details.
                 details.iter().map(|detail| {
-                    let (location, above_line, lines, below_line, lines_pad) = if let Some(range) = &detail.0 {
+                    let (location, above_line, lines, below_line, message_prefix) = if let Some(range) = &detail.0 {
                         // Get the script at the file of the detail.
                         let script = ProgramInfo::get().script_of(&range.0);
                         // Get the location of the detail.
@@ -272,6 +276,7 @@ impl NoteType {
                             lines.push((l + 1, line));
                         }
                         (
+                            // Locaion
                             format!("   \x1b[90m┌\x1b[0m `\x1b[94m{:?}\x1b[0m` \x1b[94m\x1b[1m{}\x1b[0m\x1b[34m:\x1b[94m\x1b[1m{}\x1b[0m\x1b[34m..\x1b[0m\x1b[94m\x1b[1m{}\x1b[0m\x1b[34m:\x1b[0m\x1b[94m\x1b[1m{}\x1b[0m",
                                 range.0,
                                 range.1.0,
@@ -279,6 +284,7 @@ impl NoteType {
                                 range.2.0,
                                 range.2.1,
                             ),
+                            // Above Line
                             if (lines.len() > 1) {
                                 format!("\n   \x1b[90m│ {} │\x1b[0m\x1b[95m\x1b[1m{}┌{}\x1b[0m",
                                     " ".repeat(lines_pad),
@@ -286,6 +292,7 @@ impl NoteType {
                                     "─".repeat(lines[0].1.len() - range.1.1)
                                 )
                             } else {String::new()},
+                            // Lines
                             lines.iter().map(|(l, line)| {
                                 format!("\n   \x1b[90m│\x1b[0m \x1b[94m\x1b[2m{: >lines_pad$}\x1b[0m \x1b[90m│\x1b[0m {}{}",
                                     l, line,
@@ -299,7 +306,8 @@ impl NoteType {
                                     } else {String::new()}
                                 )
                             }).collect::<Vec<_>>().join(""),
-                            format!("\n   \x1b[90m│ {} │\x1b[0m\x1b[95m\x1b[1m{}\x1b[0m",
+                            // Below Line
+                            format!("\n   \x1b[90m│ {} │\x1b[0m\x1b[95m\x1b[1m{}\x1b[0m\n",
                                 " ".repeat(lines_pad),
                                 // If the detail is single line, add a marker showing the start and end of the detail.
                                 if (lines.len() <= 1) {
@@ -314,7 +322,8 @@ impl NoteType {
                                 // If the detail is multi line, add a marker showing the end of the detail, with a line from the sol.
                                 } else {format!(" {}┘", "─".repeat(range.2.1 - 2))}
                             ),
-                            lines_pad
+                            // Message Prefix
+                            format!("└─{}─┴──", "─".repeat(lines_pad))
                         )
                     } else {
                         (
@@ -322,20 +331,22 @@ impl NoteType {
                             String::new(),
                             String::new(),
                             String::new(),
-                            0
+                            String::from("╶──────")
                         )
                     };
                     // Format the detail.
-                    format!("\n{}{}{}{}\n{}",
+                    format!("\n{}{}{}{}{}",
                         // Location of the detail.
                         location,
                         // If the detail is multi line, add a marker showing the start of the detail, with a line to eol.
                         above_line,
                         // Add the code line.
                         lines,
+                        // If the detail is single line, add a marker showing the start and end of the detail.
+                        // If the detail is multi line, add a marker showing the end of the detail, with a line from the sol.
                         below_line,
                         // The detail message.
-                        format!("   \x1b[90m└─{}─┴──\x1b[0m {}{}\x1b[0m", "─".repeat(lines_pad), self.cl(), detail.1)
+                        format!("   \x1b[90m{}\x1b[0m {}{}\x1b[0m", message_prefix, self.cl(), detail.1)
                     )
                 }).collect::<Vec<_>>().join("")
             } else {

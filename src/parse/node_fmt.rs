@@ -62,7 +62,7 @@ impl Declaration {
 
 
 impl DeclarationHeader {
-    pub fn format(&self, _indent : usize) -> String {
+    fn format(&self, _indent : usize) -> String {
         return c!(HEADER, format!("#[{}]", match (self.header) {
             DeclarationHeaderType::Entry => "entry"
         }));
@@ -71,7 +71,7 @@ impl DeclarationHeader {
 
 
 impl DeclarationVisibility {
-    pub fn format(&self, _indent : usize) -> String {
+    fn format(&self, _indent : usize) -> String {
         return c!(KEYWORD, match (self.vis) {
             DeclarationVisibilityType::Public  => "pub",
             DeclarationVisibilityType::Private => "priv"

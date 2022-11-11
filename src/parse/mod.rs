@@ -1,10 +1,10 @@
 pub mod node;
-pub mod grammer;
-pub mod node_fmt;
+    mod grammer;
+    mod node_fmt;
 
 use std::{
     fs::read_to_string,
-    path::PathBuf
+    path::PathBuf,
 };
 
 use crate::{
@@ -13,7 +13,7 @@ use crate::{
         Program
     },
     notes::push_error,
-    verify::scope::ProgramInfo
+    scope::ProgramInfo
 };
 
 
@@ -22,7 +22,8 @@ fn read(importer : &Option<Range>, path : &PathBuf) -> Option<String> {
         Ok(script) => Some(script),
         Err(error) => {
             push_error!(FileNotFound, Always, {
-                importer.clone() => {"{}", error}
+                importer.clone() => {"{}", error},
+                None             => {"File `{}` failed to load.", path.to_str().unwrap()}
             });
             None
         }
@@ -53,7 +54,7 @@ fn parse(text : &str, path : PathBuf) -> Option<Program> {
 }
 
 
-pub fn get_all_modules(importer : Option<Range>, path : PathBuf) {
+pub(crate) fn get_all_modules(importer : Option<Range>, path : PathBuf) {
     if let Some(script) = read(&importer, &path) {
         ProgramInfo::get().add_module(path.clone(), script.clone());
         if let Some(program) = parse(&script, path.clone()) {

@@ -9,14 +9,14 @@ use peg::{
 use crate::parse::node::*;
 
 
-pub fn parse(text : String, fname : &PathBuf) -> Result<Program, ParseError<LineCol>> {
+pub(crate) fn parse(text : String, fname : &PathBuf) -> Result<Program, ParseError<LineCol>> {
     return parser::traced_parse(&text, fname);
 }
 
 
-parser! {pub grammar parser(fname : &PathBuf) for str {
+parser! {grammar parser(fname : &PathBuf) for str {
 
-    pub rule traced_parse() -> Program = traced(<parse()>)
+    pub(crate) rule traced_parse() -> Program = traced(<parse()>)
     rule traced<T>(e: rule<T>) -> T =
         &(input:$([_]*) {
             #[cfg(feature = "trace")]
@@ -28,7 +28,7 @@ parser! {pub grammar parser(fname : &PathBuf) for str {
             e.ok_or("")
         }
 
-    pub rule parse() -> Program
+    pub(crate) rule parse() -> Program
         = _ decls:(decl:declaration() _ ";" _ {decl})* ![_]
             {Program {
                 decls

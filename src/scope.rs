@@ -6,12 +6,15 @@ use std::{
     collections::HashMap
 };
 
-use crate::parse::{
-    get_all_modules,
-    node::{
-        Program,
-        DeclarationType
-    }
+use crate::{
+    parse::{
+        get_all_modules,
+        node::{
+            Program,
+            DeclarationType
+        }
+    },
+    notes
 };
 
 
@@ -19,7 +22,7 @@ static mut PROGRAM_INFO : ProgramInfo = ProgramInfo::new();
 
 
 
-pub struct ProgramInfo {
+pub(crate) struct ProgramInfo {
     modules : Option<HashMap<PathBuf, (String, Option<Program>)>>
 }
 
@@ -43,13 +46,13 @@ impl ProgramInfo {
 
 impl ProgramInfo {
 
-    pub fn add_module(&mut self, mut path : PathBuf, script : String) {
+    pub(crate) fn add_module(&mut self, mut path : PathBuf, script : String) {
         let modules = self.modules.as_mut().unwrap();
         path = absolute(path).unwrap();
         modules.insert(path, (script, None));
     }
 
-    pub fn load_module(&mut self, mut path : PathBuf, program : Program) {
+    pub(crate) fn load_module(&mut self, mut path : PathBuf, program : Program) {
         let modules = self.modules.as_mut().unwrap();
         path = absolute(path).unwrap();
         let (_, target) = modules.get_mut(&path).unwrap();
@@ -68,11 +71,11 @@ impl ProgramInfo {
         }
     }
 
-    pub fn script_of(&self, path : &PathBuf) -> &String {
+    pub(crate) fn script_of(&self, path : &PathBuf) -> &String {
         return &self.modules.as_ref().unwrap()[&absolute(path).unwrap()].0;
     }
 
-    pub fn modules(&self) -> HashMap<&PathBuf, &Program> {
+    pub(crate) fn modules(&self) -> HashMap<&PathBuf, &Program> {
         return self.modules.as_ref().unwrap().iter()
             .filter(|(_, value)| matches!(value.1, Some(_)))
             .map(|(key, value)| (key, value.1.as_ref().unwrap()))
@@ -83,15 +86,15 @@ impl ProgramInfo {
 
 
 
-struct ScopeManager {}
+/*struct ScopeManager {}
 
 impl ScopeManager {
 
-    pub const fn new() -> Self {
+    const fn new() -> Self {
         return Self {};
     }
 
-}
+}*/
 
 
 
@@ -100,6 +103,8 @@ pub struct Scope {}
 impl Scope {
 
     pub fn reset() {
+        let mut lock = notes::global::COMPILATION_NOTES.write();
+        lock.clear();
         *unsafe{&mut PROGRAM_INFO} = ProgramInfo::new();
     }
 

@@ -4,7 +4,7 @@ use crate::parse::node::*;
 
 impl Program {
 
-    pub fn verify(&self) {
+    pub(crate) fn verify(&self) {
         for decl in &self.decls {
             decl.register();
         }

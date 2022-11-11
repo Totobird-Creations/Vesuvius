@@ -1,24 +1,20 @@
 #![feature(absolute_path, decl_macro)]
-#![allow(unused_parens, non_snake_case)]
+#![allow(unused_parens)]
 
-pub mod notes;
-pub mod parse;
-pub mod verify;
+pub(crate) mod notes;
+pub(crate) mod scope;
+pub(crate) mod parse;
+pub(crate) mod verify;
 
 use std::{
     process::exit,
     path::PathBuf
 };
 
-use verify::scope::Scope;
+use scope::Scope;
 
 
 fn reset() {
-    // Reset notes.
-    {
-        let mut lock = notes::COMPILATION_NOTES.write();
-        lock.clear();
-    }
     // Reset scope system.
     Scope::reset();
     // If debug, add unstable version warning.
@@ -41,7 +37,7 @@ fn main() {
     };
 
     println!("\n");
-    for (file, program) in verify::scope::ProgramInfo::get().modules() {
+    for (file, program) in scope::ProgramInfo::get().modules() {
         println!("\n\n{:?}\n", file);
         println!("{}", program);
     }
