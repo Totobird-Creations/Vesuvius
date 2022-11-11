@@ -1,3 +1,17 @@
+//! ---
+//! 
+//! ### Parser and compiler for the Vesuvius Programming Language.
+//! by [Totobird Creations](https://github.com/Totobird-Creations/)
+//! 
+//! ---
+//! 
+//! Github : [Totobird-Creations/Vesuvius](https://github.com/Totobird-Creations/Vesuvius/)
+//! 
+//! ---
+//! 
+//! > This is the documentation for the internals of vesuvius.
+//! > If you are a user of the language and not a developer, you are probably in the wrong place. See the docs (COMING SOON).
+
 #![feature(absolute_path, decl_macro)]
 #![allow(unused_parens)]
 
@@ -14,6 +28,7 @@ use std::{
 use scope::Scope;
 
 
+/// Reset all systems, ready for parsing and compilation.
 fn reset() {
     // Reset scope system.
     Scope::reset();
@@ -23,6 +38,7 @@ fn reset() {
 }
 
 
+/// Entry point of the program.
 fn main() {
 
     attempt!{
@@ -52,6 +68,8 @@ fn main() {
 }
 
 
+/// Print a title, run a function, and report any warnings and/or errors.
+/// If any errors were emitted, exit the program.
 macro attempt {
     {$title:expr; fin; $expr:expr} => {
         $crate::attempt!{$title; true; $expr}
@@ -78,6 +96,8 @@ macro attempt {
 }
 
 
+/// Print and flush some text to the console without a newline.
+/// Almost identical to `println!`.
 macro printw {
     ($($tt:tt)*) => {{
         use std::io::{

@@ -10,13 +10,14 @@ use crate::parse::node::*;
 
 
 pub(crate) fn parse(text : String, fname : &PathBuf) -> Result<Program, ParseError<LineCol>> {
-    return parser::traced_parse(&text, fname);
+    return parser::parse(&text, fname);
 }
 
 
 parser! {grammar parser(fname : &PathBuf) for str {
 
-    pub(crate) rule traced_parse() -> Program = traced(<parse()>)
+    // Debug peg stuff
+    pub(crate) rule parse() -> Program = traced(<program()>)
     rule traced<T>(e: rule<T>) -> T =
         &(input:$([_]*) {
             #[cfg(feature = "trace")]
@@ -28,7 +29,7 @@ parser! {grammar parser(fname : &PathBuf) for str {
             e.ok_or("")
         }
 
-    pub(crate) rule parse() -> Program
+    rule program() -> Program
         = _ decls:(decl:declaration() _ ";" _ {decl})* ![_]
             {Program {
                 decls
