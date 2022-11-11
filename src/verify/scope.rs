@@ -4,7 +4,7 @@ use std::{
         Deref,
         DerefMut
     },
-    cell::UnsafeCell
+    mem::drop
 };
 
 use crate::parse::node::Range;
@@ -93,10 +93,6 @@ impl Scope {
         if (unsafe{&SCOPE_GUARD_COUNT} <= &0) {
             *unsafe{&mut PROGRAM_INFO} = ProgramInfo::new();
             unsafe{&mut SCOPES}.clear();
-            {
-                let mut root = Scope::new(Some("root"));
-                root.destroyed = true
-            }
         } else {
             panic!("Can not reset when one or more scopes are in use.")
         }
@@ -154,14 +150,20 @@ pub struct SymbolGuard {
 }
 
 impl SymbolGuard {
+
     pub fn create(&mut self, symbol : Symbol) {
-        let symbol = &mut (unsafe{&mut SCOPES}[self.scope]).symbols.get_mut(&self.name).unwrap().1;
-        if let Some(symbol) = symbol {
+        let target = &mut (unsafe{&mut SCOPES}[self.scope]).symbols.get_mut(&self.name).unwrap().1;
+        if let Some(_) = target {
             panic!("Can not create already defined symbol.");
         } else {
-            *symbol = symbol;
+            *target = Some(symbol);
         }
     }
+
+    pub fn drop(self) {
+        drop(self);
+    }
+
 }
 
 impl Deref for SymbolGuard {

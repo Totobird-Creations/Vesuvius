@@ -43,26 +43,12 @@ fn main() {
         &script => parse::parse(&script)
     }.unwrap();
 
-    println!("{}", program);
-
-    {
-        let mut scope = Scope::new(Some("test"));
-        println!("{}", scope.path());
-
-        {
-            let sym_0 = scope.symbol("name");
-            println!("{:?}", sym_0);
-        }
-        let sym_1 = scope.symbol("name");
-        println!("{:?}", sym_1);
-    }
-
-    /*attempt!{
+    attempt!{
         "Verifying";
-        &script => program.verify("root")
+        &script => program.verify("program")
     };
 
-    attempt!{
+    /*attempt!{
         "Compiling";
         fin &script => notes::push_error!(InternalError, Always, {
             parse::node::Range(0, 0) => {"Todo : Compile"}
