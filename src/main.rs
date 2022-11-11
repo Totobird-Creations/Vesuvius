@@ -16,15 +16,15 @@ use verify::scope::Scope;
 
 
 fn reset() {
+    // Reset notes.
     {
         let mut lock = notes::COMPILATION_NOTES.write();
         lock.clear();
     }
-    {
-        Scope::reset();
-        let a = Scope::new(None);
-        Scope::reset();
-    }
+    // Reset scope system.
+    Scope::reset();
+    // If debug, add unstable version warning.
+    #[cfg(debug_assertions)]
     notes::push_warn!(UnstableVersion, Always);
 }
 
@@ -45,7 +45,19 @@ fn main() {
 
     println!("{}", program);
 
-    attempt!{
+    {
+        let mut scope = Scope::new(Some("test"));
+        println!("{}", scope.path());
+
+        {
+            let sym_0 = scope.symbol("name");
+            println!("{:?}", sym_0);
+        }
+        let sym_1 = scope.symbol("name");
+        println!("{:?}", sym_1);
+    }
+
+    /*attempt!{
         "Verifying";
         &script => program.verify("root")
     };
@@ -55,7 +67,7 @@ fn main() {
         fin &script => notes::push_error!(InternalError, Always, {
             parse::node::Range(0, 0) => {"Todo : Compile"}
         })
-    };
+    };*/
 
 }
 

@@ -16,8 +16,16 @@ impl Program {
     }
 }
 
+
 impl Declaration {
+
     fn register(&self, scope : &ScopeGuard) {
-        println!("{}", scope.path())
+        match (&self.decl) {
+
+            DeclarationType::Function(name, range, _, _, block) => {
+            }
+
+        }
     }
+
 }
