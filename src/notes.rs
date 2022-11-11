@@ -1,3 +1,6 @@
+//! Handles all of the warning and error queueing and printing.
+
+
 use std::cmp::max;
 
 use crate::{
@@ -6,17 +9,28 @@ use crate::{
 };
 
 
+/// Number of lines at the top and bottom of a
+/// code snippet that should be shown before being
+/// cut off and replaced with an ellipsis
 const VERTICAL_CUTOFF : usize = 3;
 
 
+/// Storage for all dumped and queued notes.
 pub(crate) mod global {
     #![allow(non_camel_case_types)]
     use static_init::dynamic;
     use super::CompilationNote;
+
+    /// All of the dumped notes. These are just used to
+    /// display the final note count at the end of execution.
     #[dynamic]
     pub(crate) static mut COMPILATION_NOTES_DUMPED : Vec<CompilationNote> = Vec::new();
+
+    /// All of the queued notes. These will be dumped once
+    /// the compilation step is finished.
     #[dynamic]
     pub(crate) static mut COMPILATION_NOTES : Vec<CompilationNote> = Vec::new();
+
 }
 
 
@@ -29,10 +43,22 @@ enum_named!{NoteOccurance {
 
 // Different error types, with the formatting functions auto generated.
 enum_named!{ErrorType {
-    #[doc("Something within the compiler did not function properly.")]
+    /// Something within the compiler did not function properly, and so
+    /// it was forced to crash. If this occurs, please report it on the
+    /// bug tracker.
     InternalError,
-    FileNotFound,
+    /// When trying to import a library or module, the file could not
+    /// be loaded.
+    /// 
+    /// This could be due to:
+    /// - The file doesn't exist.
+    /// - You don't have permissions to the file.
+    /// - etc.
+    ModuleNotFound,
+    /// While parsing, a character that wasn't expected was found.
     UnexpectedToken,
+    /// Multiple `#[entry]` headers have been defined. The program can
+    /// only start in one place, not multiple.
     DuplicateEntryHeader,
     InvalidTypeReceived,
     UnknownSymbol,
@@ -46,11 +72,13 @@ enum_named!{WarnType += ErrorType {
 }}
 
 
+/// Print documentation for a certain note code.
 pub(crate) fn explain(_id : usize) {
     todo!();
 }
 
 
+/// Dump all of the queued notes into a string, and remove them from the queue.
 pub(crate) fn dump(mut line_len : usize, finish : bool) -> Result<String, String> {
     let mut final_text = String::new();
 
@@ -125,7 +153,9 @@ pub(crate) fn dump(mut line_len : usize, finish : bool) -> Result<String, String
 }
 
 
-// Add a note to be printed after verification is complete.
+/// Add a note to the queue, which will be dumped
+/// after the compilation step is complete. Used by
+/// `push_error!` and `push_warn!`.
 #[allow(unused)]
 macro _push_note {
     ($typ:expr, $occur:ident, {$($range:expr => {$($text:tt)+}),*}) => {{
@@ -144,8 +174,11 @@ macro _push_note {
     }}
 }
 
-// Add an error to be printed after verification is complete.
-// Errors will prevent compilation.
+/// Add an error to the queue which will be dumped
+/// after the compilation step is complete.
+/// 
+/// Errors will kill the program, preventing the
+/// next compilation step from executing.
 #[allow(unused)]
 pub macro push_error {
     ($typ:ident, $occur:ident) => {$crate::notes::push_error!($typ, $occur, {})},
@@ -154,8 +187,11 @@ pub macro push_error {
     }}
 }
 
-// Add a warning to be printed after verification is complete.
-// Warnings will not prevent compilation, but will be corrected by the verifier.
+/// Add a warning to the queue which will be dumped
+/// after the compilation step is complete.
+/// 
+/// Warnings will not prevent the next compilation
+/// step from executing, but it will correct it.
 #[allow(unused)]
 pub macro push_warn {
     ($typ:ident, $occur:ident) => {$crate::notes::push_warn!($typ, $occur, {})},
@@ -165,13 +201,24 @@ pub macro push_warn {
 }
 
 
+/// A note. Stores where the note was created, the note type, and the details.
 pub(crate) struct CompilationNote {
-    pub source    : Option<(u32, u32, String)>,
-    pub occurance : NoteOccurance,
-    pub note      : NoteType,
-    pub details   : Vec<(Option<Range>, String)>
+    /// Where the note was created (internally).
+    /// Will be `None` in release builds as it is unneeded.
+    source    : Option<(u32, u32, String)>,
+    /// Whether the issue that is being pointed out will always, sometimes, or never happen.
+    occurance : NoteOccurance,
+    /// The note type. This is the title and a short, generic name.
+    note      : NoteType,
+    /// Details about the note.
+    /// This includes:
+    /// - The offending location that triggered this note.
+    /// - Why there was a problem.
+    /// - Potential fixes.
+    details   : Vec<(Option<Range>, String)>
 }
 impl CompilationNote {
+    /// Format the note, which can be printed when the note queue is dumped.
     fn fmt(&self, counts : &mut (u64, u64)) -> (String, usize) {
         let text = self.note.fmt(&self.occurance, &self.details, counts);
         return (
@@ -189,9 +236,14 @@ impl CompilationNote {
     }
 }
 
+/// The notes types.
 pub(crate) enum NoteType {
-    Warn(WarnType),  // User did something that is unrecommended.
-    Error(ErrorType) // User did something that is forbidden, or internal error.
+    /// User did something that is unrecommended.
+    /// See `push_warn!` for more info.
+    Warn(WarnType),
+    /// User did something that is forbidden, or an internal error occured.
+    /// See `push_error!` for more info.
+    Error(ErrorType)
 }
 impl NoteType {
     // Return the ansi escape colour code of this note type.
@@ -369,56 +421,63 @@ impl NoteType {
 
 
 
-// Auto generate functions for formatting a note type, with an occurance state.
+/// Auto generate functions for accessing indexes, names, and documentation of an enum variant.
 macro_rules! enum_named {
-    {$name:ident {$($(#[doc($($doc:literal),*)])? $variant:ident),*}} => {
-        $crate::notes::enum_named!{$name /=/ 0 {$($(#[doc($($doc),*)])? $variant),*}}
+    {$name:ident {$($(#[doc = $doc:literal])* $variant:ident),*}} => {
+        $crate::notes::enum_named!{$name /=/ 0 {$($(#[doc = $doc])* $variant),*}}
     };
-    {$name:ident += $addto:ident {$($(#[doc($($doc:literal),*)])? $variant:ident),*}} => {
-        $crate::notes::enum_named!{$name /=/ $addto::MAX {$($(#[doc($($doc),*)])? $variant),*}}
+    {$name:ident += $addto:ident {$($(#[doc = $doc:literal])* $variant:ident),*}} => {
+        $crate::notes::enum_named!{$name /=/ $addto::MAX {$($(#[doc = $doc])* $variant),*}}
     };
-    {$name:ident /=/ $($addto:tt)::+ {$($(#[doc($($doc:literal),*)])? $variant:ident),*}} => {
+    {$name:ident /=/ $($addto:tt)::+ {$($(#[doc = $doc:literal])* $variant:ident),*}} => {
+        /// An auto-generated enum.
         #[allow(non_camel_case_types)]
         #[derive(Clone, PartialEq, Eq, Hash)]
-        pub enum $name {
-            $($variant),*
-        }
+        pub enum $name {$(
+            $(#[doc = $doc])?
+            $variant
+        ),*}
         #[allow(unused)]
         impl $name {
-            // One higher than the id of the last variant in this enum.
+            /// One higher than the id of the last variant in this enum.
             const MAX : u32 = {
                 let mut i = $($addto)::+;
                 $({Self::$variant}; i += 1;)*
                 i
             };
-            // The id of the variant.
+            /// The id of the variant.
             fn id(&self) -> String {
                 let mut i = $($addto)::+;
                 $(if let Self::$variant = self {return format!("{:X}", i);} else {i += 1;})*
                 panic!("INTERNAL ERROR");
             }
-            // The number of 0 to pad the id by.
+            /// The number of 0 to pad the id by.
             fn id_len(&self) -> usize {
                 return max((Self::MAX - 1).to_string().len(), 4);
             }
-            // The variant name, as it was given in the declaration.
+            /// The variant name, as it was given in the declaration.
             fn name<'l>(&self) -> &'l str {
                 return match (self) {
                     $(Self::$variant => {stringify!($variant)}),*
                 };
             }
-            // The doc of the variant.
-            fn doc(&self) -> Vec<String> {
-                return match (self) {
-                    $(Self::$variant => vec![$($(String::from($doc)),*)?]),*
-                }
+            /// The doc of the variant.
+            fn doc(&self) -> Option<String> {
+                let vec : Vec<&str> = match (self) {
+                    $(Self::$variant => vec![$($doc),*]),*
+                };
+                return if (vec.len() > 0) {
+                    Some(vec.iter().map(|x| if (x.trim().is_empty()) {"\n"} else {x}).collect::<Vec<_>>().join("\n"))
+                } else {None};
             }
-            // Steps:
-            // - Replace `_` with a space and the occurance state.
-            // - Insert space before uppercase letters.
-            // - Replace uppercase letters with their lowercase counterpart.
-            // - Trim spaces off of the edges of the string.
-            // - Replace first letter with uppercase counterpart.
+            /// Formats the variant name, adding an occurance state name into it.
+            /// 
+            /// Steps:
+            /// - Replace `_` with a space and the occurance state.
+            /// - Insert space before uppercase letters.
+            /// - Replace uppercase letters with their lowercase counterpart.
+            /// - Trim spaces off of the edges of the string.
+            /// - Replace first letter with uppercase counterpart.
             fn fmt(&self, occurance : &NoteOccurance) -> String {
                 return match (self) {
                     $(Self::$variant => {

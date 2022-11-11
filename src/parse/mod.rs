@@ -21,9 +21,9 @@ fn read(importer : &Option<Range>, path : &PathBuf) -> Option<String> {
     return match (read_to_string(path.with_extension("vsv"))) {
         Ok(script) => Some(script),
         Err(error) => {
-            push_error!(FileNotFound, Always, {
+            push_error!(ModuleNotFound, Always, {
                 importer.clone() => {"{}", error},
-                None             => {"File `{}` failed to load.", path.to_str().unwrap()}
+                None             => {"Module `{}` failed to load.", path.to_str().unwrap()}
             });
             None
         }

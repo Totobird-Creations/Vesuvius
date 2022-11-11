@@ -52,12 +52,6 @@ fn main() {
         parse::get_all_modules(None, fname)
     };
 
-    println!("\n");
-    for (file, program) in scope::ProgramInfo::get().modules() {
-        println!("\n\n{:?}\n", file);
-        println!("{}", program);
-    }
-
     /*attempt!{
         "Compiling";
         fin &script => notes::push_error!(InternalError, Always, {
