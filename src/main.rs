@@ -15,17 +15,23 @@
 #![feature(absolute_path, decl_macro)]
 #![allow(unused_parens)]
 
-pub(crate) mod notes;
-pub(crate) mod scope;
-pub(crate) mod parse;
-pub(crate) mod verify;
+            mod cli;
+pub (crate) mod notes;
+pub (crate) mod scope;
+pub (crate) mod parse;
+pub (crate) mod verify;
 
 use std::{
     process::exit,
     path::PathBuf
 };
 
-use scope::Scope;
+use clap::Parser;
+
+use {
+    cli::Cli,
+    scope::Scope
+};
 
 
 /// Reset all systems, ready for parsing and compilation.
@@ -41,7 +47,10 @@ fn reset() {
 /// Entry point of the program.
 fn main() {
 
-    attempt!{
+    let cli = Cli::parse();
+    cli.run();
+
+    /*attempt!{
         "Preparing";
         reset()
     };
@@ -52,7 +61,7 @@ fn main() {
         parse::get_all_modules(None, fname)
     };
 
-    /*attempt!{
+    attempt!{
         "Compiling";
         fin &script => notes::push_error!(InternalError, Always, {
             parse::node::Range(0, 0) => {"Todo : Compile"}
