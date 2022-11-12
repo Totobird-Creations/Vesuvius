@@ -4,9 +4,9 @@ use crate::parse::node::*;
 
 impl Program {
 
-    pub(crate) fn verify(&self) {
+    pub(crate) fn _check(&self) {
         for decl in &self.decls {
-            decl.register();
+            decl._register();
         }
     }
 
@@ -16,7 +16,7 @@ impl Program {
 
 impl Declaration {
 
-    fn register(&self) {
+    fn _register(&self) {
         todo!();
     }
 

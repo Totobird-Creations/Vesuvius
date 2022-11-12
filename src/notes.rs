@@ -44,37 +44,73 @@ enum_named!{NoteOccurance {
 // Different error types, with the formatting functions auto generated.
 enum_named!{ErrorType {
     /// Something within the compiler did not function properly, and so
-    /// it was forced to crash. If this occurs, please report it on the
+    /// it was forced to crash.
+    /// 
+    /// If this occurs, please report it on the
     /// bug tracker.
     InternalError,
     /// When trying to import a library or module, the file could not
     /// be loaded.
     /// 
-    /// This could be due to:
+    /// Possible reasons:
+    /// 
     /// - The file doesn't exist.
+    /// 
     /// - You don't have permissions to the file.
-    /// - etc.
     ModuleNotFound,
     /// While parsing, a character that wasn't expected was found.
     UnexpectedToken,
     /// Multiple `#[entry]` headers have been defined. The program can
     /// only start in one place, not multiple.
     DuplicateEntryHeader,
+    /// An unexpected type was passed into a function, variable, etc.
+    /// 
+    /// Examples:
+    /// 
+    /// - If conditions must have a bool passed in.
+    /// 
+    /// - Variables, unless reinitialised, must stay the same type.
     InvalidTypeReceived,
+    /// A non-existent symbol was attempted to be accessed.
     UnknownSymbol,
+    /// A value was attempted to be modified, but it crossed either the min or max value.
     Bound_Broken
 }}
 
 // Different warning types, with the formatting functions auto generated.
 enum_named!{WarnType += ErrorType {
+    /// You are using a build of Vesuvius that isn't an official release.
+    /// 
+    /// It might be unstable and contain bugs.
     UnstableVersion,
+    /// The contents of the given block are either always or never called.
+    /// 
+    /// This will usually show up in if statements, if the condition is always or never true.
     BlockContents_Called
 }}
 
 
-/// Print documentation for a certain note code.
-pub(crate) fn explain(_id : usize) {
-    todo!();
+/// Get documentation for a certain note code.
+pub(crate) fn explain(id : usize) -> Option<String> {
+    try_explain!(ErrorType, id, Error);
+    try_explain!(WarnType, id, Warn);
+    return None;
+}
+macro try_explain {
+    ($enm:ident, $id:expr, $typ:ident) => {
+        if ($id < $enm::MAX) {
+            let var  = $enm::from_id($id).unwrap();
+            let doc  = var.doc()
+                .unwrap_or_else(|| String::from("\x1b[37m\x1b[2m\x1b[3mNo documentation found for this note code.\x1b[0m"))
+                .split("\n").map(|x| String::from("   ") + x)
+                .collect::<Vec<_>>().join("\n");
+            let note = NoteType::$typ(var);
+            return Some(format!("{}\x1b[0m\n{}",
+                note.title(None),
+                doc
+            ));
+        }
+    }
 }
 
 
@@ -267,27 +303,19 @@ impl NoteType {
             Self::Error (_) => "ERROR"
         }
     }
-    // Format the note.
-    fn fmt(&self, occurance : &NoteOccurance, details : &Vec<(Option<Range>, String)>, (warns, errors) : &mut (u64, u64)) -> (String, usize) {
+    // Get the formatted note title.
+    fn title(&self, occurance : Option<&NoteOccurance>) -> String {
         // Get the note type info.
-        let (title, id, id_len, internal_error) = match (self) {
+        let (title, id, id_len) = match (self) {
             Self::Warn(warn) => {
-                *warns += 1;
-                (warn.fmt(occurance), warn.id(), warn.id_len(), false)
+                (warn.fmt(occurance), warn.id(), warn.id_len())
             },
             Self::Error(error) => {
-                *errors += 1;
-                (error.fmt(occurance), error.id(), error.id_len(), matches!(error, ErrorType::InternalError))
+                (error.fmt(occurance), error.id(), error.id_len())
             }
         };
-        // Get the unformatted note title and get the length. This is used to make the note separators the correct length.
-        let title_len = format!(" [ {}({}) ] : {}.",
-            self.pf(),
-            " ".repeat(id_len),
-            title
-        ).len();
         // Get the formatted note title.
-        let title = format!(" {}[ {}\x1b[2m(\x1b[0m{}{}\x1b[1m{}\x1b[0m{}\x1b[2m)\x1b[0m {}]\x1b[0m : {}\x1b[1m{}\x1b[0m.",
+        return format!(" {}[ {}\x1b[2m(\x1b[0m{}{}\x1b[1m{}\x1b[0m{}\x1b[2m)\x1b[0m {}]\x1b[0m : {}\x1b[1m{}\x1b[0m.",
             self.cl(),
             self.pf(),
             self.clp(),
@@ -298,9 +326,29 @@ impl NoteType {
             self.clp(),
             title
         );
+    }
+    // Format the note.
+    fn fmt(&self, occurance : &NoteOccurance, details : &Vec<(Option<Range>, String)>, (warns, errors) : &mut (u64, u64)) -> (String, usize) {
+        // Get the note type info.
+        let (title, id_len, internal_error) = match (self) {
+            Self::Warn(warn) => {
+                *warns += 1;
+                (warn.fmt(Some(occurance)), warn.id_len(), false)
+            },
+            Self::Error(error) => {
+                *errors += 1;
+                (error.fmt(Some(occurance)), error.id_len(), matches!(error, ErrorType::InternalError))
+            }
+        };
+        // Get the unformatted note title and get the length. This is used to make the note separators the correct length.
+        let title_len = format!(" [ {}({}) ] : {}.",
+            self.pf(),
+            " ".repeat(id_len),
+            title
+        ).len();
         // Get the entire note.
         let text = format!("{}{}{}",
-            title,
+            self.title(Some(occurance)),
             if (details.len() > 0) {
                 // Add details.
                 details.iter().map(|detail| {
@@ -440,7 +488,7 @@ macro_rules! enum_named {
         #[allow(unused)]
         impl $name {
             /// One higher than the id of the last variant in this enum.
-            const MAX : u32 = {
+            const MAX : usize = {
                 let mut i = $($addto)::+;
                 $({Self::$variant}; i += 1;)*
                 i
@@ -455,6 +503,12 @@ macro_rules! enum_named {
             fn id_len(&self) -> usize {
                 return max((Self::MAX - 1).to_string().len(), 4);
             }
+            /// Get the variant from the code
+            fn from_id(id : usize) -> Option<Self> {
+                let mut i = $($addto)::+;
+                $(if (id == i) {return Some(Self::$variant)} else {i += 1;})*
+                return None;
+            }
             /// The variant name, as it was given in the declaration.
             fn name<'l>(&self) -> &'l str {
                 return match (self) {
@@ -467,7 +521,7 @@ macro_rules! enum_named {
                     $(Self::$variant => vec![$($doc),*]),*
                 };
                 return if (vec.len() > 0) {
-                    Some(vec.iter().map(|x| if (x.trim().is_empty()) {"\n"} else {x}).collect::<Vec<_>>().join("\n"))
+                    Some(vec.iter().map(|mut x| {let x = x.trim(); if (x.is_empty()) {String::from("\n")} else {format!("{x} ")}}).collect::<Vec<_>>().join(""))
                 } else {None};
             }
             /// Formats the variant name, adding an occurance state name into it.
@@ -478,14 +532,16 @@ macro_rules! enum_named {
             /// - Replace uppercase letters with their lowercase counterpart.
             /// - Trim spaces off of the edges of the string.
             /// - Replace first letter with uppercase counterpart.
-            fn fmt(&self, occurance : &NoteOccurance) -> String {
+            fn fmt(&self, occurance : Option<&NoteOccurance>) -> String {
                 return match (self) {
                     $(Self::$variant => {
                         let mut string = String::new();
                         for ch in stringify!($variant).chars() {
                             if (ch == '_') {
-                                string.push(' ');
-                                string.push_str(occurance.name());
+                                if let Some(occurance) = occurance {
+                                    string.push(' ');
+                                    string.push_str(occurance.name());
+                                }
                             } else {
                                 if (ch.is_uppercase()) {
                                     string.push(' ');
