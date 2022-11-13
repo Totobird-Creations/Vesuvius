@@ -2,7 +2,10 @@ pub mod node;
     mod grammer;
     mod node_fmt;
 
-use std::fs::read_to_string;
+use std::{
+    fs::read_to_string,
+    env::current_dir
+};
 
 use relative_path::RelativePathBuf;
 
@@ -12,7 +15,8 @@ use crate::{
         Program
     },
     notes::push_error,
-    scope::ProgramInfo
+    scope::ProgramInfo,
+    helper::AbsolutePathBuf
 };
 
 
@@ -22,7 +26,7 @@ fn read(importer : &Option<Range>, path : &RelativePathBuf) -> Option<String> {
         Err(error) => {
             push_error!(ModuleNotFound, Always, {
                 importer.clone() => {"{}", error},
-                None             => {"Module `{}` failed to load.", path.iter().map(|x| x).collect::<Vec<_>>().join("::")}
+                None             => {"Module `{}` failed to load.", RelativePathBuf::from(&*current_dir().unwrap().as_os_str().to_string_lossy()).relative(path.absolute())}
             });
             None
         }
@@ -53,7 +57,8 @@ fn parse(text : &str, path : RelativePathBuf) -> Option<Program> {
 }
 
 
-pub(crate) fn get_all_modules(importer : Option<Range>, path : RelativePathBuf) {
+pub(crate) fn get_all_modules(importer : Option<Range>, mut path : RelativePathBuf) {
+    path = path.absolute();
     if let Some(script) = read(&importer, &path) {
         ProgramInfo::get().add_module(path.clone(), script.clone());
         if let Some(program) = parse(&script, path.clone()) {

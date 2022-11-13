@@ -59,14 +59,13 @@ impl ProgramInfo {
 impl ProgramInfo {
 
     /// Add a module path and script to the known modules list.
-    pub(crate) fn add_module(&mut self, path : RelativePathBuf, script : String) {
+    pub(crate) fn add_module(&mut self, mut path : RelativePathBuf, script : String) {
         let modules = self.modules.as_mut().unwrap();
         modules.insert(path, (script, None, None));
     }
 
     /// Add a parsed program to the known modules list.
     pub(crate) fn load_module(&mut self, mut path : RelativePathBuf, program : Program) {
-        let path = path.absolute();
         let modules = self.modules.as_mut().unwrap();
         let (_, target, _) = modules.get_mut(&path).unwrap();
         *target = Some(program);
