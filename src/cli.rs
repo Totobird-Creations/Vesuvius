@@ -1,7 +1,4 @@
-use std::{
-    process::exit,
-    env::current_dir
-};
+use std::process::exit;
 
 use clap::{
     Parser,
