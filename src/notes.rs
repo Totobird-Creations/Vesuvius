@@ -131,9 +131,10 @@ pub(crate) fn dump(mut line_len : usize, finish : bool) -> Result<String, String
         line_len = res.1;
     }
     for note_dumped in notes_dumped.iter() {
+        use NoteType::*;
         match (note_dumped.note) {
-            NoteType::Warn  (_) => {counts.0 += 1},
-            NoteType::Error (_) => {counts.0 += 1}
+            Warn  (_) => {counts.0 += 1},
+            Error (_) => {counts.0 += 1}
         }
     }
     // Print a line after the last note.
@@ -178,7 +179,7 @@ pub(crate) fn dump(mut line_len : usize, finish : bool) -> Result<String, String
         }
         // Print final message.
         final_text += &format!("\n \x1b[37m\x1b[2m=>\x1b[0m {}.\n", finished);
-        final_text += &format!("\x1b[90m{}\x1b[0m\n\n", "─".repeat(5 + finished_len));
+        final_text += &format!("\x1b[90m{}\x1b[0m\n", "─".repeat(5 + finished_len));
     }
     notes_dumped.append(&mut notes);
     return if (errors > 0) {

@@ -1,13 +1,16 @@
-use crate::parse::node::*;
+pub(crate) mod types;
+
+use crate::{
+    parse::node::*,
+    scope::LinkedScopes
+};
 
 
 
 impl Program {
 
-    pub(crate) fn _check(&self) {
-        for decl in &self.decls {
-            decl._register();
-        }
+    pub(crate) fn register_declarations(&self, _ : &mut LinkedScopes) {
+        self.decls.iter().for_each(|decl| decl.register());
     }
 
 }
@@ -16,8 +19,12 @@ impl Program {
 
 impl Declaration {
 
-    fn _register(&self) {
-        todo!();
+    fn register(&self) {
+        use DeclarationType::*;
+        match (&self.decl) {
+            Module(_, _) => {},
+            Function(_, _, _, _, _) => {}
+        }
     }
 
 }

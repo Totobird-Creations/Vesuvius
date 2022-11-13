@@ -1,6 +1,5 @@
 use std::{
     process::exit,
-    path::PathBuf,
     env::current_dir
 };
 
@@ -8,6 +7,7 @@ use clap::{
     Parser,
     Subcommand
 };
+use relative_path::RelativePathBuf;
 
 use crate::{
     notes::{
@@ -15,7 +15,9 @@ use crate::{
         push_error
     },
     parse::get_all_modules,
-    reset
+    reset,
+    scope::ProgramInfo,
+    helper::AbsolutePathBuf
 };
 
 
@@ -54,7 +56,7 @@ enum Command {
     Check {
         /// The path containing the entry script (main.vsv).
         /// If none is given, it will use the current working directory.
-        path : Option<PathBuf>
+        path : Option<RelativePathBuf>
     },
 
     /// Check if the program can be compiled,
@@ -62,7 +64,7 @@ enum Command {
     Build {
         /// The path containing the entry script (main.vsv).
         /// If none is given, it will use the current working directory.
-        path : Option<PathBuf>
+        path : Option<RelativePathBuf>
     },
 
     /// Check if the program can be compiled,
@@ -70,7 +72,7 @@ enum Command {
     Run {
         /// The path containing the entry script (main.vsv).
         /// If none is given, it will use the current working directory.
-        path : Option<PathBuf>
+        path : Option<RelativePathBuf>
     },
 
     /// Show the documentation for a certain error.
@@ -136,30 +138,34 @@ impl Cli {
     }
 
 
-    fn check(path : Option<PathBuf>) {
+    fn check(path : Option<RelativePathBuf>) {
 
         attempt!{
+            start;
             "Preparing";
             reset()
         };
 
-        let path = path.unwrap_or_else(|| current_dir().unwrap_or_else(|err| {
-            println!("\x1b[31m\x1b[1merror:\x1b[0m Failed to get cwd: `\x1b[33m{}\x1b[0m`", err);
-            exit(1);
-        })).join("main");
+        let path = path.unwrap_or_else(|| RelativePathBuf::absolute_from(".")).join("main");
 
         attempt!{
             "Parsing";
             get_all_modules(None, path)
         };
 
+        attempt!{
+            "Checking";
+            ProgramInfo::get().check_modules()
+        }
+
     }
 
 
-    fn build(path : Option<PathBuf>) {
+    fn build(path : Option<RelativePathBuf>) {
         Cli::check(path);
 
         attempt!{
+            end;
             "Building";
             push_error!(InternalError, Always, {
                 None => {"Todo : Build"}
@@ -168,7 +174,7 @@ impl Cli {
     }
 
 
-    fn run(path : Option<PathBuf>) {
+    fn run(path : Option<RelativePathBuf>) {
         Cli::build(path);
     }
 
@@ -179,16 +185,15 @@ impl Cli {
 /// Print a title, run a function, and report any warnings and/or errors.
 /// If any errors were emitted, exit the program.
 macro attempt {
-    {$title:expr; fin; $expr:expr} => {
-        $crate::cli::attempt!{$title; true; $expr}
-    },
-    {$title:expr; $expr:expr} => {
-        $crate::cli::attempt!{$title; false; $expr}
-    },
-    {$title:expr; $fin:ident; $expr:expr} => {{
-        $crate::cli::printw!("\n \x1b[37m\x1b[2m=>\x1b[0m \x1b[96m{}\x1b[0m\x1b[36m\x1b[2m...\x1b[0m", $title);
+    {$title:expr; $expr:expr} => {$crate::cli::attempt!{false, false; $title; $expr}},
+    {start; $title:expr; $expr:expr} => {$crate::cli::attempt!{true, false; $title; $expr}},
+    {end; $title:expr; $expr:expr} => {$crate::cli::attempt!{false, true; $title; $expr}},
+    {start, end; $title:expr; $expr:expr} => {$crate::cli::attempt!{true, true; $title; $expr}},
+    {$start:ident, $end:ident; $title:expr; $expr:expr} => {{
+        if (! $start) {$crate::cli::printw!("\n");}
+        $crate::cli::printw!(" \x1b[37m\x1b[2m=>\x1b[0m \x1b[96m{}\x1b[0m\x1b[36m\x1b[2m...\x1b[0m", $title);
         let v = $expr;
-        match ($crate::notes::dump(4 + $title.len() + 13, $fin)) {
+        match ($crate::notes::dump(4 + $title.len() + 13, $end)) {
             Ok(text) => {
                 $crate::cli::printw!(" [\x1b[32m\x1b[1mSUCCESS\x1b[0m]\n");
                 $crate::cli::printw!("{}", text);

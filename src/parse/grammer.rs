@@ -1,20 +1,20 @@
-use std::path::PathBuf;
-
 use peg::{
     parser,
     error::ParseError,
     str::LineCol
 };
 
+use relative_path::RelativePathBuf;
+
 use crate::parse::node::*;
 
 
-pub(crate) fn parse(text : String, fname : &PathBuf) -> Result<Program, ParseError<LineCol>> {
+pub(crate) fn parse(text : String, fname : &RelativePathBuf) -> Result<Program, ParseError<LineCol>> {
     return parser::parse(&text, fname);
 }
 
 
-parser! {grammar parser(fname : &PathBuf) for str {
+parser! {grammar parser(fname : &RelativePathBuf) for str {
 
     // Debug peg stuff
     pub(crate) rule parse() -> Program = traced(<program()>)

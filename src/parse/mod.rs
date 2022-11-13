@@ -2,10 +2,9 @@ pub mod node;
     mod grammer;
     mod node_fmt;
 
-use std::{
-    fs::read_to_string,
-    path::PathBuf,
-};
+use std::fs::read_to_string;
+
+use relative_path::RelativePathBuf;
 
 use crate::{
     parse::node::{
@@ -17,20 +16,20 @@ use crate::{
 };
 
 
-fn read(importer : &Option<Range>, path : &PathBuf) -> Option<String> {
-    return match (read_to_string(path.with_extension("vsv"))) {
+fn read(importer : &Option<Range>, path : &RelativePathBuf) -> Option<String> {
+    return match (read_to_string(&path.with_extension("vsv").as_str())) {
         Ok(script) => Some(script),
         Err(error) => {
             push_error!(ModuleNotFound, Always, {
                 importer.clone() => {"{}", error},
-                None             => {"Module `{}` failed to load.", path.to_str().unwrap()}
+                None             => {"Module `{}` failed to load.", path.iter().map(|x| x).collect::<Vec<_>>().join("::")}
             });
             None
         }
     };
 }
 
-fn parse(text : &str, path : PathBuf) -> Option<Program> {
+fn parse(text : &str, path : RelativePathBuf) -> Option<Program> {
     return grammer::parse(text.into(), &path)
         .map_err(|e| {push_error!(UnexpectedToken, Always, {
             Some(Range(path, e.location.offset, e.location.offset)) => {"{}.", {
@@ -54,7 +53,7 @@ fn parse(text : &str, path : PathBuf) -> Option<Program> {
 }
 
 
-pub(crate) fn get_all_modules(importer : Option<Range>, path : PathBuf) {
+pub(crate) fn get_all_modules(importer : Option<Range>, path : RelativePathBuf) {
     if let Some(script) = read(&importer, &path) {
         ProgramInfo::get().add_module(path.clone(), script.clone());
         if let Some(program) = parse(&script, path.clone()) {

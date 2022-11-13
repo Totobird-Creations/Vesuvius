@@ -20,19 +20,17 @@ pub (crate) mod notes;
 pub (crate) mod scope;
 pub (crate) mod parse;
 pub (crate) mod check;
+pub (crate) mod helper;
 
 use clap::Parser;
 
-use {
-    cli::Cli,
-    scope::Scope
-};
+use cli::Cli;
 
 
 /// Reset all systems, ready for parsing and compilation.
 fn reset() {
     // Reset scope system.
-    Scope::reset();
+    scope::reset();
     // If debug, add unstable version warning.
     #[cfg(debug_assertions)]
     notes::push_warn!(UnstableVersion, Always);

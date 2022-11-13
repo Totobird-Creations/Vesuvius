@@ -1,16 +1,15 @@
 #![allow(unused)]
 
 
-use std::{
-    collections::HashMap,
-    path::PathBuf
-};
+use std::collections::HashMap;
+
+use relative_path::RelativePathBuf;
 
 use line_col::LineColLookup;
 
 
 #[derive(Debug, Clone)]
-pub struct Range(pub PathBuf, pub usize, pub usize);
+pub struct Range(pub RelativePathBuf, pub usize, pub usize);
 impl Range {
     pub fn to_linecolumn(&self, script : &String) -> LineColumn {
         let lookup = LineColLookup::new(script);
@@ -23,7 +22,7 @@ impl Range {
 }
 
 #[derive(Debug, Clone)]
-pub struct LineColumn(pub PathBuf, pub (usize, usize), pub (usize, usize));
+pub struct LineColumn(pub RelativePathBuf, pub (usize, usize), pub (usize, usize));
 
 
 #[derive(Debug)]
