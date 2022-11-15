@@ -17,6 +17,7 @@ use crate::{
     parse::{
         get_all_modules,
         node::{
+            Range,
             Program,
             DeclarationType
         }
@@ -121,7 +122,7 @@ impl<'l> ProgramInfo<'l> {
 pub(crate) struct Scope<'l> {
     name    : String,
     parent  : Option<&'l Scope<'l>>,
-    symbols : UnsafeCell<HashMap<String, Value>>
+    symbols : UnsafeCell<HashMap<String, Symbol>>
 }
 
 impl<'l> Scope<'l> {
@@ -146,15 +147,15 @@ impl<'l> Scope<'l> {
 
 impl<'l> Scope<'l> {
 
-    pub(crate) fn init_symbol(&self, name : String, value : Value) {
+    pub(crate) fn init_symbol(&self, name : String, symbol : Symbol) {
         let symbols = unsafe{&mut*self.symbols.get()};
-        if matches!(self.parent, None) && let Some(symbol) = symbols.get(&name) {
+        if matches!(self.parent, None) && let Some(old_symbol) = symbols.get(&name) {
             push_error!(DuplicateSymbol, Always, {
-                Some(symbol.range().clone()) => {"Already defined here."},
-                Some(value.range().clone())  => {"Defined again here."}
+                Some(old_symbol.range.clone()) => {"Already defined here."},
+                Some(symbol.range.clone())     => {"Defined again here."}
             });
         } else {
-            symbols.insert(name, value);
+            symbols.insert(name, symbol);
         }
     }
 
@@ -173,4 +174,23 @@ impl<'l> Debug for Scope<'l> {
         return write!(f, "{}", parts.join("::"));
     }
     
+}
+
+
+pub(crate) struct Symbol {
+    value   : Value,
+    mutable : bool,
+    range   : Range
+}
+
+impl Symbol {
+
+    pub(crate) fn new(value : Value, mutable : bool, range : Range) -> Self {
+        return Self {
+            value,
+            mutable,
+            range
+        };
+    }
+
 }

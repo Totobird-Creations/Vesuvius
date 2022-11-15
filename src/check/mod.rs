@@ -2,7 +2,10 @@ pub(crate) mod types;
 
 use crate::{
     parse::node::*,
-    scope::Scope,
+    scope::{
+        Scope,
+        Symbol
+    },
     check::types::{
         Value,
         ValueType
@@ -48,8 +51,12 @@ impl Declaration {
             Module(parts, _) => {
                 scope.init_symbol(
                     parts[parts.len() - 1].clone(),
-                    Value::new(
-                        ValueType::ModuleAccess(parts.clone()),
+                    Symbol::new(
+                        Value::new(
+                            ValueType::ModuleAccess(parts.clone()),
+                            self.range.clone()
+                        ),
+                        false,
                         self.range.clone()
                     )
                 );
@@ -58,8 +65,12 @@ impl Declaration {
             Function(name, _, args, ret, block) => {
                 scope.init_symbol(
                     name.clone(),
-                    Value::new(
-                        ValueType::Function(name.clone(), args.clone(), ret.clone(), block.clone()),
+                    Symbol::new(
+                        Value::new(
+                            ValueType::Function(name.clone(), args.clone(), ret.clone(), block.clone()),
+                            self.range.clone()
+                        ),
+                        false,
                         self.range.clone()
                     )
                 );
