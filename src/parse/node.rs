@@ -9,7 +9,7 @@ use line_col::LineColLookup;
 
 
 #[derive(Debug, Clone)]
-pub struct Range(pub RelativePathBuf, pub usize, pub usize);
+pub struct Range(pub Vec<String>, pub usize, pub usize);
 impl Range {
     pub fn to_linecolumn(&self, script : &String) -> LineColumn {
         let lookup = LineColLookup::new(script);
@@ -22,7 +22,7 @@ impl Range {
 }
 
 #[derive(Debug, Clone)]
-pub struct LineColumn(pub RelativePathBuf, pub (usize, usize), pub (usize, usize));
+pub struct LineColumn(pub Vec<String>, pub (usize, usize), pub (usize, usize));
 
 
 #[derive(Debug)]

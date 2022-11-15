@@ -4,17 +4,15 @@ use peg::{
     str::LineCol
 };
 
-use relative_path::RelativePathBuf;
-
 use crate::parse::node::*;
 
 
-pub(crate) fn parse(text : String, fname : &RelativePathBuf) -> Result<Program, ParseError<LineCol>> {
-    return parser::parse(&text, fname);
+pub(crate) fn parse(text : String, module : &Vec<String>) -> Result<Program, ParseError<LineCol>> {
+    return parser::parse(&text, module);
 }
 
 
-parser! {grammar parser(fname : &RelativePathBuf) for str {
+parser! {grammar parser(module : &Vec<String>) for str {
 
     // Debug peg stuff
     pub(crate) rule parse() -> Program = traced(<program()>)
@@ -39,12 +37,12 @@ parser! {grammar parser(fname : &RelativePathBuf) for str {
     rule declaration() -> Declaration
         = headers:(header:declaration_header() _ {header})* _
           vis:declaration_visibility()
-          start:position!() decl:(declaration_import() / declaration_function()) end:position!() _
+          start:position!() decl:(declaration_module() / declaration_function()) end:position!() _
             {Declaration {
                 headers,
                 vis,
                 decl,
-                range   : Range(fname.clone(), start, end)
+                range   : Range(module.clone(), start, end)
             }}
 
     rule declaration_header() -> DeclarationHeader
@@ -53,7 +51,7 @@ parser! {grammar parser(fname : &RelativePathBuf) for str {
         )"]" end:position!()
             {DeclarationHeader {
                 header,
-                range  : Range(fname.clone(), start, end)
+                range  : Range(module.clone(), start, end)
             }}
 
     rule declaration_visibility() -> DeclarationVisibility
@@ -65,29 +63,29 @@ parser! {grammar parser(fname : &RelativePathBuf) for str {
                 let vis = if let Some(vis) = vis {vis} else {DeclarationVisibilityType::Private};
                 DeclarationVisibility {
                     vis,
-                    range : Range(fname.clone(), start, end)
+                    range : Range(module.clone(), start, end)
                 }
             }
 
 
-    rule declaration_import() -> DeclarationType
+    rule declaration_module() -> DeclarationType
         = "mod" __ start:position!() parts:((part:ident() _ {part}) ++ "::") end:position!()
-            {DeclarationType::Module(parts, Range(fname.clone(), start, end))}
+            {DeclarationType::Module(parts, Range(module.clone(), start, end))}
 
     rule declaration_function() -> DeclarationType
         = "fn" __ start:position!() name:ident() end:position!() _ /* TODO : Arguments and return */ block:block()
-            {DeclarationType::Function(name, Range(fname.clone(), start, end), Vec::new(), None, block)}
+            {DeclarationType::Function(name, Range(module.clone(), start, end), Vec::new(), None, block)}
 
 
 
     rule statement() -> Statement
         = start:position!() stmt:("let" __ start_name:position!() name:ident() end_name:position!() _ "=" _ value:expression()
-            {StatementType::InitVar(name, Range(fname.clone(), start_name, end_name), value)}
+            {StatementType::InitVar(name, Range(module.clone(), start_name, end_name), value)}
         / expr:expression()
             {StatementType::Expression(expr)}
         ) end:position!() {Statement {
             stmt,
-            range : Range(fname.clone(), start, end)
+            range : Range(module.clone(), start, end)
         }}
 
 
@@ -102,7 +100,7 @@ parser! {grammar parser(fname : &RelativePathBuf) for str {
         {
             let mut left = left;
             for (op, right) in ops {
-                let range = Range(fname.clone(), left.range.1, right.range.2);
+                let range = Range(module.clone(), left.range.1, right.range.2);
                 left = Expression {
                     expr : match (op) {
                         "==" => ExpressionType::EqualsOperation(Box::new(left), Box::new(right)),
@@ -124,7 +122,7 @@ parser! {grammar parser(fname : &RelativePathBuf) for str {
         {
             let mut left = left;
             for (op, right) in ops {
-                let range = Range(fname.clone(), left.range.1, right.range.2);
+                let range = Range(module.clone(), left.range.1, right.range.2);
                 left = Expression {
                     expr : match (op) {
                         "+" => ExpressionType::AdditionOperation(Box::new(left), Box::new(right)),
@@ -151,7 +149,7 @@ parser! {grammar parser(fname : &RelativePathBuf) for str {
                         expr  : ExpressionType::Atom(right),
                         range : right_range
                     };
-                    let range = Range(fname.clone(), left.range.1, right.range.2);
+                    let range = Range(module.clone(), left.range.1, right.range.2);
                     left = Expression {
                         expr : match (op) {
                             "*" => ExpressionType::MultiplicationOperation(Box::new(left), Box::new(right)),
@@ -176,15 +174,15 @@ parser! {grammar parser(fname : &RelativePathBuf) for str {
             {AtomType::Literal(lit)}
         ) end:position!() {Atom {
             atom  : atom,
-            range : Range(fname.clone(), start, end)
+            range : Range(module.clone(), start, end)
         }}
     
     rule atom_if() -> AtomType
         = ifstart:position!() "if" _ "(" _ ifcondi:expression() _ ")" _ ifblock:block() ifend:position!() _
-          elf:(elifstart:position!() "elif" _ "(" _ elifcondi:expression() _ ")" _ elifblock:block() elifend:position!() _ {(Box::new(elifcondi), elifblock, Range(fname.clone(), elifstart, elifend))})*
-          els:(elsestart:position!() "else" _ elseblock:block() elseend:position!() {(elseblock, Range(fname.clone(), elsestart, elseend))})?
+          elf:(elifstart:position!() "elif" _ "(" _ elifcondi:expression() _ ")" _ elifblock:block() elifend:position!() _ {(Box::new(elifcondi), elifblock, Range(module.clone(), elifstart, elifend))})*
+          els:(elsestart:position!() "else" _ elseblock:block() elseend:position!() {(elseblock, Range(module.clone(), elsestart, elseend))})?
             {
-                let mut ifs  = vec![(Box::new(ifcondi), ifblock, Range(fname.clone(), ifstart, ifend))];
+                let mut ifs  = vec![(Box::new(ifcondi), ifblock, Range(module.clone(), ifstart, ifend))];
                 let mut elf = elf;
                 ifs.append(&mut elf);
                 AtomType::If(
@@ -205,13 +203,13 @@ parser! {grammar parser(fname : &RelativePathBuf) for str {
             }}
         ) end:position!() {Literal {
             lit,
-            range : Range(fname.clone(), start, end)
+            range : Range(module.clone(), start, end)
         }}
 
     rule block() -> Block
         = start:position!() "{" _ b:(s:((_ s:statement() _ {s}) ++ ";") r:";"? {(s, r)})? _ "}" end:position!()
             {
-                let range = Range(fname.clone(), start, end);
+                let range = Range(module.clone(), start, end);
                 if let Some(body) = b {
                     Block {
                         stmts   : body.0,

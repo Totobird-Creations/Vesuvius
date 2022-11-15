@@ -74,7 +74,7 @@ enum Command {
 
     /// Show the documentation for a certain error.
     Explain {
-        /// The error code.
+        /// The hexadecimal error code.
         code : String
     }
 
@@ -143,11 +143,12 @@ impl Cli {
             reset()
         };
 
-        let path = path.unwrap_or_else(|| RelativePathBuf::absolute_from(".")).join("main");
+        let path = path.unwrap_or_else(|| RelativePathBuf::absolute_from("."))
+            .absolute();
 
         attempt!{
             "Parsing";
-            get_all_modules(None, path)
+            get_all_modules(None, &path, vec![String::from("main")])
         };
 
         attempt!{
@@ -173,6 +174,14 @@ impl Cli {
 
     fn run(path : Option<RelativePathBuf>) {
         Cli::build(path);
+
+        attempt!{
+            end;
+            "Running";
+            push_error!(InternalError, Always, {
+                None => {"Todo : Run"}
+            })
+        };
     }
 
 }

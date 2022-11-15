@@ -12,7 +12,7 @@
 //! > This is the documentation for the internals of vesuvius.
 //! > If you are a user of the language and not a developer, you are probably in the wrong place. See the docs (COMING SOON).
 
-#![feature(absolute_path, decl_macro)]
+#![feature(absolute_path, decl_macro, let_chains)]
 #![allow(unused_parens)]
 
             mod cli;

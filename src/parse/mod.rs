@@ -2,10 +2,7 @@ pub mod node;
     mod grammer;
     mod node_fmt;
 
-use std::{
-    fs::read_to_string,
-    env::current_dir
-};
+use std::fs::read_to_string;
 
 use relative_path::RelativePathBuf;
 
@@ -15,28 +12,31 @@ use crate::{
         Program
     },
     notes::push_error,
-    scope::ProgramInfo,
-    helper::AbsolutePathBuf
+    scope::ProgramInfo
 };
 
 
-fn read(importer : &Option<Range>, path : &RelativePathBuf) -> Option<String> {
+fn read(importer : &Option<Range>, base : &RelativePathBuf, module : &Vec<String>) -> Option<String> {
+    let mut path = base.clone();
+    for part in module {
+        path.push(part);
+    }
     return match (read_to_string(&path.with_extension("vsv").as_str())) {
         Ok(script) => Some(script),
         Err(error) => {
             push_error!(ModuleNotFound, Always, {
                 importer.clone() => {"{}", error},
-                None             => {"Module `{}` failed to load.", RelativePathBuf::from(&*current_dir().unwrap().as_os_str().to_string_lossy()).relative(path.absolute())}
+                None             => {"Module `{}` failed to load.", module.join("::")}
             });
             None
         }
     };
 }
 
-fn parse(text : &str, path : RelativePathBuf) -> Option<Program> {
-    return grammer::parse(text.into(), &path)
+fn parse(text : &str, module : Vec<String>) -> Option<Program> {
+    return grammer::parse(text.into(), &module)
         .map_err(|e| {push_error!(UnexpectedToken, Always, {
-            Some(Range(path, e.location.offset, e.location.offset)) => {"{}.", {
+            Some(Range(module, e.location.offset, e.location.offset)) => {"{}.", {
                 let mut tokens = e.expected.tokens().collect::<Vec<_>>();
                 if (tokens.len() == 1) {
                     format!("Expected {}", tokens[0])
@@ -57,12 +57,11 @@ fn parse(text : &str, path : RelativePathBuf) -> Option<Program> {
 }
 
 
-pub(crate) fn get_all_modules(importer : Option<Range>, mut path : RelativePathBuf) {
-    path = path.absolute();
-    if let Some(script) = read(&importer, &path) {
-        ProgramInfo::get().add_module(path.clone(), script.clone());
-        if let Some(program) = parse(&script, path.clone()) {
-            ProgramInfo::get().load_module(path, program);
+pub(crate) fn get_all_modules(importer : Option<Range>, base : &RelativePathBuf, module : Vec<String>) {
+    if let Some(script) = read(&importer, base, &module) {
+        ProgramInfo::get().add_module(module.clone(), script.clone());
+        if let Some(program) = parse(&script, module.clone()) {
+            ProgramInfo::get().load_module(base, module, program);
         }
     }
 }

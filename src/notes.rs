@@ -73,12 +73,20 @@ enum_named!{ErrorType {
     InvalidTypeReceived,
     /// A non-existent symbol was attempted to be accessed.
     UnknownSymbol,
+    /// A symbol that already existed was attempted to be overwritten in a scope that doesn't allow it.
+    DuplicateSymbol,
     /// A value was attempted to be modified, but it crossed either the min or max value.
     Bound_Broken
 }}
 
 // Different warning types, with the formatting functions auto generated.
 enum_named!{WarnType += ErrorType {
+    /// Something within the compiler did not function properly, but it
+    /// wasn't bad enough to crash.
+    /// 
+    /// If this occurs, please report it on the
+    /// bug tracker.
+    InternalWarning,
     /// You are using a build of Vesuvius that isn't an official release.
     /// 
     /// It might be unstable and contain bugs.
@@ -331,10 +339,10 @@ impl NoteType {
     // Format the note.
     fn fmt(&self, occurance : &NoteOccurance, details : &Vec<(Option<Range>, String)>, (warns, errors) : &mut (u64, u64)) -> (String, usize) {
         // Get the note type info.
-        let (title, id_len, internal_error) = match (self) {
+        let (title, id_len, internal_issue) = match (self) {
             Self::Warn(warn) => {
                 *warns += 1;
-                (warn.fmt(Some(occurance)), warn.id_len(), false)
+                (warn.fmt(Some(occurance)), warn.id_len(), matches!(warn, WarnType::InternalWarning))
             },
             Self::Error(error) => {
                 *errors += 1;
@@ -454,7 +462,7 @@ impl NoteType {
                 // If no details were provided, mention it.
                 String::from("\n \x1b[37m\x1b[2m\x1b[3mNo other details provided.\x1b[0m")
             },
-            if (internal_error) {
+            if (internal_issue) {
                 if (cfg!(debug_assertions)) {
                     format!("\n \x1b[37m\x1b[2m\x1b[3mThis is a debug build of {}.\n Do not report this on the bug tracker.\x1b[0m", env!("CARGO_PKG_NAME"))
                 } else {
