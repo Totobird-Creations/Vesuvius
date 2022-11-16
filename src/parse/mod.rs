@@ -1,6 +1,7 @@
 pub mod node;
     mod grammer;
     mod node_fmt;
+pub mod config;
 
 use std::fs::read_to_string;
 

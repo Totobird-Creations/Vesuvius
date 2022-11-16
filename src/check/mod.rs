@@ -28,9 +28,9 @@ impl Program {
     }
 
     pub(crate) fn expand_types(&self, _scope : &mut Scope) {
-        push_warn!(InternalWarning, Always, {
-            None => {"Todo : Expand Types"}
-        })
+        push_error!(InternalError, Always, {
+            None => {"Todo : Check Contents"}
+        });
     }
 
     pub(crate) fn check_contents(&self, scope : &mut Scope) {

@@ -11,7 +11,10 @@ use crate::{
         explain,
         push_error
     },
-    parse::get_all_modules,
+    parse::{
+        get_all_modules,
+        config
+    },
     reset,
     scope::ProgramInfo,
     helper::AbsolutePathBuf
@@ -137,14 +140,17 @@ impl Cli {
 
     fn check(path : Option<RelativePathBuf>) {
 
-        attempt!{
-            start;
-            "Preparing";
-            reset()
-        };
-
         let path = path.unwrap_or_else(|| RelativePathBuf::absolute_from("."))
             .absolute();
+
+        let config = attempt!{
+            start;
+            "Preparing";
+            {
+                reset();
+                config::read(&path)
+            }
+        }.unwrap();
 
         attempt!{
             "Parsing";
