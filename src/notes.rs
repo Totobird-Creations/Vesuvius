@@ -4,7 +4,10 @@
 use std::cmp::max;
 
 use crate::{
-    parse::node::Range,
+    parse::{
+        node::Range,
+        config::Config
+    },
     scope::ProgramInfo
 };
 
@@ -43,12 +46,31 @@ enum_named!{NoteOccurance {
 
 // Different error types, with the formatting functions auto generated.
 enum_named!{ErrorType {
+
+    /* INTERNAL */
+
     /// Something within the compiler did not function properly, and so
     /// it was forced to crash.
     /// 
     /// If this occurs, please report it on the
     /// bug tracker.
     InternalError,
+
+    /* PREPARING */
+
+    /// The `config.vsv.ron` file contained an invalid project name.
+    /// It may only contain alphanumeric and `_` characters.
+    ConfigProjectInvalidName,
+    /// The `config.vsv.ron` file contained an invalid project version.
+    /// It must follow the semver format.
+    ConfigProjectInvalidVersion,
+
+    /* PARSING */
+    /// While parsing, a character that wasn't expected was found.
+    UnexpectedToken,
+
+    /* CHECKING */
+
     /// When trying to import a library or module, the file could not
     /// be loaded.
     /// 
@@ -58,8 +80,6 @@ enum_named!{ErrorType {
     /// 
     /// - You don't have permissions to the file.
     ModuleNotFound,
-    /// While parsing, a character that wasn't expected was found.
-    UnexpectedToken,
     /// Multiple `#[entry]` headers have been defined. The program can
     /// only start in one place, not multiple.
     DuplicateEntryHeader,
@@ -77,10 +97,14 @@ enum_named!{ErrorType {
     DuplicateSymbol,
     /// A value was attempted to be modified, but it crossed either the min or max value.
     Bound_Broken
+
 }}
 
 // Different warning types, with the formatting functions auto generated.
 enum_named!{WarnType += ErrorType {
+
+    /* INTERNAL */
+
     /// Something within the compiler did not function properly, but it
     /// wasn't bad enough to crash.
     /// 
@@ -91,6 +115,9 @@ enum_named!{WarnType += ErrorType {
     /// 
     /// It might be unstable and contain bugs.
     UnstableVersion,
+
+    /* CHECKING */
+
     /// The contents of the given block are either always or never called.
     /// 
     /// This will usually show up in if statements, if the condition is always or never true.
@@ -123,7 +150,7 @@ macro try_explain {
 
 
 /// Dump all of the queued notes into a string, and remove them from the queue.
-pub(crate) fn dump(mut line_len : usize, finish : bool) -> Result<String, String> {
+pub(crate) fn dump(mut line_len : usize, finish : bool, config : Option<&Config>) -> Result<String, String> {
     let mut final_text = String::new();
 
     let mut notes        = global::COMPILATION_NOTES.write();
@@ -186,7 +213,15 @@ pub(crate) fn dump(mut line_len : usize, finish : bool) -> Result<String, String
             }
         }
         // Print final message.
-        final_text += &format!("\n \x1b[37m\x1b[2m=>\x1b[0m {}.\n", finished);
+        let prefix = format!(" \x1b[37m\x1b[2m=>\x1b[0m ");
+        if let Some(config) = config {
+            final_text += &format!("\n{}\x1b[96m{}\x1b[0m \x1b[36m{}\x1b[0m.",
+                prefix,
+                config.project.name,
+                config.project.version.as_ref().unwrap()
+            );
+        }
+        final_text += &format!("\n{}{}.\n", if (matches!(config, None)) {prefix} else {String::from("    ")}, finished);
         final_text += &format!("\x1b[90m{}\x1b[0m\n", "─".repeat(5 + finished_len));
     }
     notes_dumped.append(&mut notes);

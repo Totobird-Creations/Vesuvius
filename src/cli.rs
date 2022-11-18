@@ -154,12 +154,14 @@ impl Cli {
 
         attempt!{
             "Parsing";
-            get_all_modules(None, &path, vec![String::from("main")])
+            get_all_modules(None, &path, vec![String::from("main")]);
+            config
         };
 
         attempt!{
             "Checking";
-            ProgramInfo::get().check_modules()
+            ProgramInfo::get().check_modules();
+            config
         }
 
     }
@@ -197,15 +199,15 @@ impl Cli {
 /// Print a title, run a function, and report any warnings and/or errors.
 /// If any errors were emitted, exit the program.
 macro attempt {
-    {$title:expr; $expr:expr} => {$crate::cli::attempt!{false, false; $title; $expr}},
-    {start; $title:expr; $expr:expr} => {$crate::cli::attempt!{true, false; $title; $expr}},
-    {end; $title:expr; $expr:expr} => {$crate::cli::attempt!{false, true; $title; $expr}},
-    {start, end; $title:expr; $expr:expr} => {$crate::cli::attempt!{true, true; $title; $expr}},
-    {$start:ident, $end:ident; $title:expr; $expr:expr} => {{
+    {$title:expr; $expr:expr $(; $config:ident)?} => {$crate::cli::attempt!{false, false; $title; $expr $(; $config)?}},
+    {start; $title:expr; $expr:expr $(; $config:ident)?} => {$crate::cli::attempt!{true, false; $title; $expr $(; $config)?}},
+    {end; $title:expr; $expr:expr $(; $config:ident)?} => {$crate::cli::attempt!{false, true; $title; $expr $(; $config)?}},
+    {start, end; $title:expr; $expr:expr $(; $config:ident)?} => {$crate::cli::attempt!{true, true; $title; $expr $(; $config)?}},
+    {$start:ident, $end:ident; $title:expr; $expr:expr $(; $config:ident)?} => {{
         if (! $start) {$crate::cli::printw!("\n");}
         $crate::cli::printw!(" \x1b[37m\x1b[2m=>\x1b[0m \x1b[96m{}\x1b[0m\x1b[36m\x1b[2m...\x1b[0m", $title);
         let v = $expr;
-        match ($crate::notes::dump(4 + $title.len() + 13, $end)) {
+        match ($crate::notes::dump(4 + $title.len() + 13, $end, $crate::cli::attempt!{~cfg = $($config)?})) {
             Ok(text) => {
                 $crate::cli::printw!(" [\x1b[32m\x1b[1mSUCCESS\x1b[0m]\n");
                 $crate::cli::printw!("{}", text);
@@ -217,7 +219,11 @@ macro attempt {
             }
         };
         v
-    }}
+    }},
+
+    {~cfg = } => {None},
+    {~cfg = $config:ident} => {Some(&$config)}
+
 }
 
 

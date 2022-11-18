@@ -11,22 +11,26 @@ use crate::notes::{
 };
 
 
+const ALLOWED_PROJECT_NAME_CHARS : &'static str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_";
+
+
 #[derive(Deserialise)]
 pub struct Config {
-    project : Project
+    pub project : Project
 }
 
 #[derive(Deserialise)]
 pub struct Project {
-    name    : String,
+    pub name    : String,
     #[serde(deserialize_with = "deserialise_version")]
-    version : Option<Version>
+    pub version : Result<Version, (String, semver::Error)>
 }
 
-fn deserialise_version<'l, D>(d : D) -> Result<Option<Version>, D::Error>
+fn deserialise_version<'l, D>(d : D) -> Result<Result<Version, (String, semver::Error)>, D::Error>
     where D : serde::Deserializer<'l>
 {
-    return Ok(Version::parse(<&str>::deserialize(d)?).ok());
+    let version = <&str>::deserialize(d)?;
+    return Ok(Version::parse(version).map_err(|e| (version.to_owned(), e)));
 }
 
 
@@ -56,7 +60,42 @@ pub(crate) fn read(path : &RelativePathBuf) -> Option<Config> {
 }
 
 fn check(config : &Config) {
-    push_warn!(InternalWarning, Always, {
-        None => {"Todo : Check Project Config"}
-    });
+    // Project
+    {
+        // Name
+        {
+            let mut invalid = Vec::new();
+            for ch in config.project.name.chars() {
+                if (! ALLOWED_PROJECT_NAME_CHARS.contains(ch)) {
+                    invalid.push(ch);
+                }
+            }
+            if (invalid.len() > 0) {
+                push_error!(ConfigProjectInvalidName, Always, {
+                    None => {"Project name contains invalid character{}: {}",
+                        if (invalid.len() != 1) {"s"} else {""},
+                        if (invalid.len() == 1) {
+                            format!("`{}`", invalid[0])
+                        } else {
+                            let last = invalid.remove(invalid.len() - 1);
+                            format!("{}, or {}",
+                                invalid.iter()
+                                    .map(|ch| format!("`{}`", ch))
+                                    .collect::<Vec<_>>().join(", "),
+                                format!("`{}`", last)
+                            )
+                        }
+                    }
+                });
+            }
+        }
+        // Version
+        if let Err((text, error)) = &config.project.version {
+            push_error!(ConfigProjectInvalidName, Always, {
+                None => {"Project version `{}` is invalid", text},
+                None => {"{}", error}
+            });
+            return;
+        }
+    }
 }
